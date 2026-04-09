@@ -1,0 +1,24 @@
+{
+  "name": "my_home_smart",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.10.1"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.10.1",
+    "jsdom": "^26.1.0",
+    "typescript": "~6.0.2",
+    "vite": "^8.0.4",
+    "vitest": "^3.2.4"
+  }
+}
