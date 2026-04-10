@@ -1,73 +1,70 @@
 # Tuya Desk Controller
 
-Aplicación de escritorio para Windows construida con `Tauri + Rust + Vite + TypeScript` para controlar switches Tuya/Tuya Smart desde PC, con soporte explícito para dispositivos multigang.
+[![Release](https://img.shields.io/github/v/release/dorlanpabon/my_home_smart)](https://github.com/dorlanpabon/my_home_smart/releases)
+[![License](https://img.shields.io/github/license/dorlanpabon/my_home_smart)](https://github.com/dorlanpabon/my_home_smart/blob/main/LICENSE)
+[![Tauri](https://img.shields.io/badge/Tauri-v2-24C8DB)](https://tauri.app/)
+[![Rust](https://img.shields.io/badge/Rust-stable-000000)](https://www.rust-lang.org/)
 
-## Qué resuelve
+Desktop controller for Tuya and Tuya Smart wall switches, built with `Tauri + Rust + Vite + TypeScript`.
 
-- Configuración local de `TUYA_CLIENT_ID`, `TUYA_CLIENT_SECRET`, `TUYA_BASE_URL` y región.
-- Prueba de conexión y obtención de token Tuya Cloud desde Rust.
-- Listado de dispositivos enlazados al proyecto.
-- Normalización de dispositivos hacia un modelo `Device` y `DeviceChannel`.
-- Detección centralizada de canales `switch`, `switch_led`, `switch_1` a `switch_4`.
-- Control ON/OFF independiente por canal.
-- Refresh manual, feedback de errores y registro local simple de acciones.
-- Alias locales de dispositivos y canales.
-- Base preparada para `automation`, `scheduler` y `local_api`.
+This project focuses on a real gap in the Tuya ecosystem: fast desktop control for multi-gang light switches without depending on the mobile app UI. It uses the official Tuya Cloud API, models each switch channel explicitly, and is structured to grow into local automation and API integrations.
 
-## Stack
+## Release
 
-- Tauri v2
-- Rust backend
-- Vite + TypeScript vanilla frontend
-- IPC con comandos Tauri
-- Persistencia local en archivos JSON/JSONL
+- Latest tagged release: [`v0.1.0`](https://github.com/dorlanpabon/my_home_smart/releases/tag/v0.1.0)
+- Windows installer: [`Tuya Desk Controller_0.1.0_x64-setup.exe`](https://github.com/dorlanpabon/my_home_smart/releases/tag/v0.1.0)
 
-## Requisitos
+## Why this project exists
 
-- Node.js 22+
-- npm 10+
-- Rust `stable`
-- Windows con toolchain MSVC
+Most Tuya desktop workflows are either:
 
-Validado en esta máquina con `rustc 1.94.1`.
+- mobile-first and awkward on PC
+- tied to generic device dashboards
+- not explicit about multi-gang wall switches
+- hard to extend into local automations
 
-## Comandos
+Tuya Desk Controller solves that by treating a device as a parent entity with one or more independent channels such as `switch`, `switch_led`, or `switch_1` through `switch_4`.
 
-```bash
-npm install
-npm run tauri dev
-npm run tauri build
-```
+## Highlights
 
-Comandos útiles adicionales:
+- Official Tuya Cloud integration, no scraping or reverse engineering
+- Explicit multi-gang support for 1, 2, 3, and 4 channel switches
+- Per-channel ON/OFF control
+- Local credential and preference storage
+- Clean desktop UI optimized for fast control
+- Alias support for devices and individual channels
+- Action log for recent operations
+- Modular backend prepared for `automation`, `scheduler`, and `local_api`
 
-```bash
-npm run test
-npm run build
-cd src-tauri && cargo test
-```
+## What makes it different
 
-## Flujo de uso
+- It is built around wall-switch channels as first-class entities, not just generic device cards.
+- It keeps Tuya credentials and request signing in the Rust backend instead of leaking cloud logic into the frontend.
+- It is intentionally structured so the same backend can later power a desktop app, local scheduler, and local HTTP API.
 
-1. Abrir la app.
-2. Si no existe configuración, se muestra la pantalla de setup.
-3. Guardar credenciales Tuya Cloud y región.
-4. Probar conexión.
-5. Cargar dispositivos.
-6. Revisar canales detectados por tarjeta.
-7. Encender o apagar cada canal de forma independiente.
-8. Refrescar estados cuando haga falta.
+## MVP scope
 
-## Configuración Tuya
+The current release supports:
 
-Valores típicos para tu caso:
+- saving Tuya Cloud credentials and region settings
+- testing connection from the Rust backend
+- obtaining and refreshing Tuya access tokens
+- listing linked devices
+- loading device functions, status, and capabilities
+- inferring channel count and controlability
+- toggling channels independently
+- refreshing device state
+- handling common failures such as invalid credentials, expired tokens, offline devices, and partial Tuya responses
 
-- `Base URL`: `https://openapi.tuyaus.com`
-- `Region label`: `Western America Data Center`
+## Tech stack
 
-La app guarda la configuración en el directorio de datos de la aplicación. Si abres Settings más tarde y dejas vacío el `Client Secret`, se conserva el secreto ya guardado.
+- `Tauri v2`
+- `Rust`
+- `Vite`
+- `TypeScript`
+- lightweight vanilla frontend architecture
 
-## Estructura
+## Project structure
 
 ```text
 src/
@@ -89,54 +86,176 @@ src-tauri/
     services/
   capabilities/
   icons/
+
+docs/
+  architecture.md
 ```
 
-## Arquitectura
+## Documentation
 
-Resumen corto:
+- Architecture notes: [docs/architecture.md](/D:/xampp/htdocs/my_home_smart/docs/architecture.md)
+- Release artifacts: [releases](/D:/xampp/htdocs/my_home_smart/releases)
 
-- El frontend nunca consume el JSON raw de Tuya para renderizar lógica principal.
-- Rust encapsula firma, token, HTTP y normalización.
-- El comando Tauri devuelve `Device[]` ya listos para UI.
-- La detección de gangs está en una función reusable: `infer_device_channels(...)`.
-- Los módulos futuros deberán reutilizar el mismo servicio de dominio y no hablar con la UI.
+## Domain model
 
-Detalle completo en [docs/architecture.md](/D:/xampp/htdocs/my_home_smart/docs/architecture.md).
+The app is built around a normalized domain model instead of rendering raw Tuya payloads directly.
 
-## Persistencia local
+- `Device`
+  - `id`
+  - `name`
+  - `online`
+  - `category`
+  - `productId`
+  - `inferredType`
+  - `gangCount`
+  - `channels`
+  - `raw`
+  - `metadata`
+- `DeviceChannel`
+  - `code`
+  - `displayName`
+  - `index`
+  - `currentState`
+  - `controllable`
+- `TuyaFunction`
+- `TuyaStatus`
+- `AppConfig`
+- `DeviceAlias`
+- `ChannelAlias`
 
-Se guarda en el directorio de datos de la app:
+## How channel detection works
 
-- `config.json`: credenciales y URL base
-- `metadata.json`: alias y preferencias UI
-- `actions.jsonl`: historial simple de acciones
+Channel inference is centralized in a reusable function:
 
-## Estrategia de detección de gangs
+- `infer_device_channels(...)`
 
-Orden de prioridad:
+Detection priority:
 
 1. `switch_1`, `switch_2`, `switch_3`, `switch_4`
 2. `switch`
 3. `switch_led`
-4. fallback por códigos booleanos que contengan `switch`
+4. fallback to boolean switch-like codes discovered in functions, status, or capabilities
 
-Si un código existe sólo en `status`, el canal se muestra pero queda como no controlable.
+Rules:
 
-## Build generado
+- if `switch_1` and `switch_2` exist, the device is treated as 2-gang
+- if `switch_1` to `switch_3` exist, it is treated as 3-gang
+- if `switch_1` to `switch_4` exist, it is treated as 4-gang
+- if only `switch` or `switch_led` exists, it is treated as 1 channel
+- if a code appears in `status` but not in functions or capabilities, it is shown as detected but not controllable
 
-La build validada genera el instalador NSIS en:
+## Architecture
 
-[`src-tauri/target/release/bundle/nsis/Tuya Desk Controller_0.1.0_x64-setup.exe`](/D:/xampp/htdocs/my_home_smart/src-tauri/target/release/bundle/nsis/Tuya%20Desk%20Controller_0.1.0_x64-setup.exe)
+The core design decision is to keep Tuya-specific logic in Rust and keep the frontend bound only to normalized app models.
 
-## Próximos pasos naturales
+Current flow:
 
-- Probar con tus dispositivos reales y ajustar mensajes según respuestas concretas de Tuya.
-- Afinar el fallback de endpoints de listado si tu proyecto usa un paquete/permisos específicos.
-- Añadir polling opcional o refresh programado.
-- Incorporar `local_api` y `scheduler` sobre el mismo `TuyaService`.
+- `frontend -> Tauri commands -> Tuya service -> Tuya Cloud`
 
-## Notas
+This keeps:
 
-- Se usa la API oficial de Tuya Cloud.
-- No hay scraping ni dependencia de la app móvil.
-- El MVP está orientado a switches de luz, especialmente multigang.
+- secrets out of the frontend
+- signature and token handling in one place
+- device normalization reusable across future transports
+
+Detailed notes are in [docs/architecture.md](/D:/xampp/htdocs/my_home_smart/docs/architecture.md).
+
+## Local persistence
+
+The app stores data in the application data directory:
+
+- `config.json`
+  - Tuya credentials and base URL
+- `metadata.json`
+  - device aliases, channel aliases, UI preferences
+- `actions.jsonl`
+  - lightweight local action history
+
+## Requirements
+
+- `Node.js 22+`
+- `npm 10+`
+- `Rust stable`
+- Windows with the MSVC toolchain
+
+Validated locally with `rustc 1.94.1`.
+
+## Getting started
+
+```bash
+npm install
+npm run tauri dev
+```
+
+Build a release:
+
+```bash
+npm run tauri build
+```
+
+Useful verification commands:
+
+```bash
+npm run test
+npm run build
+cd src-tauri && cargo test
+```
+
+## Configuration
+
+Typical values for Tuya Western America:
+
+- `Base URL`: `https://openapi.tuyaus.com`
+- `Region label`: `Western America Data Center`
+
+You will also need:
+
+- `Client ID`
+- `Client Secret`
+
+If the settings screen is opened later and `Client Secret` is left blank, the app preserves the stored secret instead of overwriting it.
+
+## Roadmap
+
+Near term:
+
+- better refresh behavior and background polling
+- more robust endpoint fallback handling
+- more fixtures from real Tuya device payloads
+- improved offline/degraded mode
+
+Planned architecture extensions:
+
+- `automation`
+- `scheduler`
+- `local_api`
+
+Longer term:
+
+- local HTTP endpoints for external integrations
+- scheduled actions
+- simple scenes and rules
+- Home Assistant and Node-RED friendly local bridges
+
+## Why the architecture matters
+
+The current backend is intentionally shaped so it can evolve without rewriting the MVP:
+
+- today: `frontend -> Tauri commands -> TuyaService`
+- later: `frontend -> commands -> ApplicationService -> TuyaService`
+- later: `local_api -> ApplicationService -> TuyaService`
+- later: `scheduler -> ApplicationService -> TuyaService`
+
+That avoids duplicating:
+
+- token handling
+- request signing
+- Tuya error mapping
+- channel inference
+- device normalization
+
+## Status
+
+This is a real, functional MVP aimed at Tuya wall-switch control from Windows. It is not a UI mockup and not a generic template scaffold.
+
+The strongest current use case is multi-gang switch control with a clean desktop workflow and a backend foundation ready for automation features.
