@@ -30,23 +30,45 @@ pub async fn load_bootstrap(
             action_log,
             devices: Vec::new(),
             connection: ConnectionStatus::needs_config(),
+            uses_cached_devices: false,
         });
     };
 
-    let service = TuyaService::new(config.clone(), state.token_cache.clone());
-    match service.list_devices(&metadata).await {
-        Ok(devices) => Ok(BootstrapPayload {
+    if let Some(snapshot) = store.load_cached_devices().map_err(AppErrorPayload::from)? {
+        return Ok(BootstrapPayload {
             has_config: true,
             config: Some(config.masked()),
             ui_preferences: metadata.ui_preferences,
             action_log,
-            devices,
+            devices: snapshot.devices,
             connection: ConnectionStatus {
                 state: "connected".into(),
-                message: Some("Connected to Tuya Cloud.".into()),
-                last_checked_at: Some(current_timestamp_ms()),
+                message: Some("Loaded cached devices. Refreshing from Tuya Cloud.".into()),
+                last_checked_at: Some(snapshot.updated_at_ms),
             },
-        }),
+            uses_cached_devices: true,
+        });
+    }
+
+    let service = TuyaService::new(config.clone(), state.token_cache.clone());
+    match service.list_devices(&metadata).await {
+        Ok(devices) => {
+            let _ = store.save_cached_devices(&devices);
+
+            Ok(BootstrapPayload {
+                has_config: true,
+                config: Some(config.masked()),
+                ui_preferences: metadata.ui_preferences,
+                action_log,
+                devices,
+                connection: ConnectionStatus {
+                    state: "connected".into(),
+                    message: Some("Connected to Tuya Cloud.".into()),
+                    last_checked_at: Some(current_timestamp_ms()),
+                },
+                uses_cached_devices: false,
+            })
+        }
         Err(err) => {
             let payload = AppErrorPayload::from(err);
             Ok(BootstrapPayload {
@@ -60,6 +82,7 @@ pub async fn load_bootstrap(
                     message: Some(payload.message),
                     last_checked_at: Some(current_timestamp_ms()),
                 },
+                uses_cached_devices: false,
             })
         }
     }
@@ -153,6 +176,7 @@ pub async fn toggle_channel(
         .await
         .map_err(AppErrorPayload::from)?;
     let _ = store.append_action_log(&action.action_log_entry);
+    let _ = patch_cached_device_statuses(&store, &action.device_id, &action.statuses);
 
     Ok(action)
 }
@@ -163,13 +187,14 @@ pub async fn save_device_alias(
     payload: SaveDeviceAliasPayload,
 ) -> Result<(), AppErrorPayload> {
     let store = LocalStore::new(&app);
-    store
+    let metadata = store
         .save_device_alias(crate::models::app::DeviceAlias {
             device_id: payload.device_id,
             alias: payload.alias,
         })
-        .map(|_| ())
-        .map_err(AppErrorPayload::from)
+        .map_err(AppErrorPayload::from)?;
+    let _ = patch_cached_device_alias(&store, &metadata);
+    Ok(())
 }
 
 #[tauri::command]
@@ -178,14 +203,15 @@ pub async fn save_channel_alias(
     payload: SaveChannelAliasPayload,
 ) -> Result<(), AppErrorPayload> {
     let store = LocalStore::new(&app);
-    store
+    let metadata = store
         .save_channel_alias(ChannelAlias {
             device_id: payload.device_id,
             channel_code: payload.channel_code,
             alias: payload.alias,
         })
-        .map(|_| ())
-        .map_err(AppErrorPayload::from)
+        .map_err(AppErrorPayload::from)?;
+    let _ = patch_cached_device_alias(&store, &metadata);
+    Ok(())
 }
 
 #[tauri::command]
@@ -216,7 +242,9 @@ async fn load_devices(
     let config = store.load_config()?.ok_or(AppError::MissingConfig)?;
     let metadata = store.load_metadata()?;
     let service = TuyaService::new(config, state.token_cache.clone());
-    service.list_devices(&metadata).await
+    let devices = service.list_devices(&metadata).await?;
+    let _ = store.save_cached_devices(&devices);
+    Ok(devices)
 }
 
 fn current_timestamp_ms() -> u64 {
@@ -233,5 +261,105 @@ fn normalize_view_mode(value: &str) -> String {
         "developer" | "detailed" => "developer".into(),
         "user" | "compact" => "user".into(),
         _ => "user".into(),
+    }
+}
+
+fn patch_cached_device_statuses(
+    store: &LocalStore,
+    device_id: &str,
+    statuses: &[crate::models::tuya::TuyaStatus],
+) -> Result<(), AppError> {
+    let Some(mut snapshot) = store.load_cached_devices()? else {
+        return Ok(());
+    };
+
+    if let Some(device) = snapshot
+        .devices
+        .iter_mut()
+        .find(|entry| entry.id == device_id)
+    {
+        for channel in &mut device.channels {
+            if let Some(status) = statuses.iter().find(|entry| entry.code == channel.code) {
+                if let Some(value) = parse_status_bool(&status.value) {
+                    channel.current_state = Some(value);
+                }
+            }
+        }
+
+        device.raw.status = statuses.to_vec();
+        store.save_cached_devices(&snapshot.devices)?;
+    }
+
+    Ok(())
+}
+
+fn patch_cached_device_alias(
+    store: &LocalStore,
+    metadata: &crate::models::app::LocalMetadata,
+) -> Result<(), AppError> {
+    let Some(mut snapshot) = store.load_cached_devices()? else {
+        return Ok(());
+    };
+
+    for device in &mut snapshot.devices {
+        device.metadata = Some(crate::models::app::DeviceLocalMetadata {
+            alias: metadata.device_alias_for(&device.id).map(str::to_string),
+        });
+
+        device.name = metadata
+            .device_alias_for(&device.id)
+            .filter(|alias| !alias.is_empty())
+            .map(str::to_string)
+            .unwrap_or_else(|| resolve_cached_device_name(device));
+
+        for channel in &mut device.channels {
+            let alias = metadata
+                .channel_alias_for(&device.id, &channel.code)
+                .filter(|alias| !alias.is_empty())
+                .map(str::to_string);
+            channel.alias = alias.clone();
+            channel.display_name =
+                alias.unwrap_or_else(|| default_cached_channel_name(&channel.code, channel.index));
+        }
+    }
+
+    store.save_cached_devices(&snapshot.devices)?;
+    Ok(())
+}
+
+fn parse_status_bool(value: &serde_json::Value) -> Option<bool> {
+    match value {
+        serde_json::Value::Bool(inner) => Some(*inner),
+        serde_json::Value::String(inner) if inner.eq_ignore_ascii_case("true") => Some(true),
+        serde_json::Value::String(inner) if inner.eq_ignore_ascii_case("false") => Some(false),
+        _ => None,
+    }
+}
+
+fn resolve_cached_device_name(device: &crate::models::app::Device) -> String {
+    device
+        .raw
+        .summary
+        .get("name")
+        .and_then(serde_json::Value::as_str)
+        .or_else(|| {
+            device
+                .raw
+                .details
+                .get("name")
+                .and_then(serde_json::Value::as_str)
+        })
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| device.name.clone())
+}
+
+fn default_cached_channel_name(code: &str, index: usize) -> String {
+    match code {
+        "switch" => "Main channel".into(),
+        "switch_led" => "Backlight".into(),
+        _ if code.starts_with("switch_") => format!("Switch {index}"),
+        _ => code.to_string(),
     }
 }

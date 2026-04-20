@@ -109,6 +109,7 @@ export interface BootstrapPayload {
   actionLog: ActionLogEntry[];
   devices: Device[];
   connection: ConnectionStatus;
+  usesCachedDevices?: boolean;
 }
 
 export interface ToggleChannelPayload {

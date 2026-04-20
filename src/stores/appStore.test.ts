@@ -22,6 +22,7 @@ const bootstrapPayload: BootstrapPayload = {
     message: "ok",
     lastCheckedAt: 123,
   },
+  usesCachedDevices: false,
 };
 
 function createApi(overrides: Partial<DesktopApi> = {}): DesktopApi {
@@ -66,5 +67,46 @@ describe("AppStore", () => {
     store.updateConfigDraft("clientId", "new-id");
 
     expect(store.getState().configDraft.clientId).toBe("new-id");
+  });
+
+  it("refreshes in background after loading cached bootstrap devices", async () => {
+    const refreshAllDevices = vi.fn().mockResolvedValue([
+      {
+        id: "device-1",
+        name: "Sala",
+        online: true,
+        category: "kg",
+        productId: "abc",
+        inferredType: "3-gang light switch",
+        gangCount: 1,
+        channels: [],
+        raw: {
+          summary: {},
+          details: {},
+          functions: [],
+          status: [],
+          capabilities: [],
+          specifications: {},
+        },
+        metadata: null,
+      },
+    ]);
+
+    const store = new AppStore(
+      createApi({
+        loadBootstrap: () =>
+          Promise.resolve({
+            ...bootstrapPayload,
+            usesCachedDevices: true,
+            devices: [],
+          }),
+        refreshAllDevices,
+      }),
+    );
+
+    await store.bootstrap();
+    await Promise.resolve();
+
+    expect(refreshAllDevices).toHaveBeenCalledTimes(1);
   });
 });

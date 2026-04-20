@@ -9,10 +9,16 @@ if (!root) {
   throw new Error("Unable to locate #app root element.");
 }
 
+const appRoot = root;
+
 const store = new AppStore();
+let queuedState = store.getState();
+let renderScheduled = false;
+let lastMarkup = "";
 
 store.subscribe((state) => {
-  root.innerHTML = renderAppShell(state, store.getVisibleDevices());
+  queuedState = state;
+  scheduleRender();
 });
 
 root.addEventListener("click", async (event) => {
@@ -125,6 +131,24 @@ root.addEventListener("submit", async (event) => {
 });
 
 void store.bootstrap();
+
+function scheduleRender(): void {
+  if (renderScheduled) {
+    return;
+  }
+
+  renderScheduled = true;
+  window.requestAnimationFrame(() => {
+    renderScheduled = false;
+    const nextMarkup = renderAppShell(queuedState, store.getVisibleDevices());
+    if (nextMarkup === lastMarkup) {
+      return;
+    }
+
+    appRoot.innerHTML = nextMarkup;
+    lastMarkup = nextMarkup;
+  });
+}
 
 async function copyText(value: string): Promise<void> {
   if (navigator.clipboard?.writeText) {

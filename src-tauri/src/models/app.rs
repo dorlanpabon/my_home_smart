@@ -183,6 +183,15 @@ pub struct BootstrapPayload {
     pub action_log: Vec<ActionLogEntry>,
     pub devices: Vec<Device>,
     pub connection: ConnectionStatus,
+    #[serde(default)]
+    pub uses_cached_devices: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CachedDevicesSnapshot {
+    pub devices: Vec<Device>,
+    pub updated_at_ms: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

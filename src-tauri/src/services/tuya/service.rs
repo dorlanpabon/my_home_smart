@@ -55,13 +55,14 @@ impl TuyaService {
     pub async fn list_devices(&self, metadata: &LocalMetadata) -> AppResult<Vec<Device>> {
         let summaries = self.fetch_device_summaries().await?;
         let metadata = metadata.clone();
+        let concurrency = summaries.len().clamp(4, 12);
 
         let mut devices: Vec<Device> = stream::iter(summaries.into_iter().map(|summary| {
             let service = self.clone();
             let metadata = metadata.clone();
             async move { service.hydrate_device(summary, &metadata).await }
         }))
-        .buffer_unordered(8)
+        .buffer_unordered(concurrency)
         .try_collect::<Vec<_>>()
         .await?;
 
