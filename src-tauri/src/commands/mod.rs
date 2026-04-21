@@ -6,7 +6,8 @@ use crate::{
     models::app::{
         ActionLogEntry, AppConfig, BootstrapPayload, ChannelAlias, ConnectionStatus,
         DeviceStatusUpdate, SaveChannelAliasPayload, SaveDeviceAliasPayload,
-        SaveUiPreferencesPayload, ToggleChannelPayload, ToggleChannelResult,
+        SaveUiPreferencesPayload, SetDeviceChannelsPayload, SetDeviceChannelsResult,
+        ToggleChannelPayload, ToggleChannelResult,
     },
     services::tuya::service::TuyaService,
     SharedState,
@@ -207,6 +208,30 @@ pub async fn toggle_channel(
 }
 
 #[tauri::command]
+pub async fn set_device_channels(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+    payload: SetDeviceChannelsPayload,
+) -> Result<SetDeviceChannelsResult, AppErrorPayload> {
+    let store = LocalStore::new(&app);
+    let config = store
+        .load_config()
+        .map_err(AppErrorPayload::from)?
+        .ok_or_else(|| AppErrorPayload::from(AppError::MissingConfig))?;
+    let metadata = store.load_metadata().map_err(AppErrorPayload::from)?;
+    let channel_codes = resolve_cached_controllable_channels(&store, &payload.device_id)
+        .map_err(AppErrorPayload::from)?;
+    let service = TuyaService::new(config, state.token_cache.clone());
+    let action = service
+        .set_device_channels(&metadata, &payload.device_id, &channel_codes, payload.value)
+        .await
+        .map_err(AppErrorPayload::from)?;
+    let _ = store.append_action_log(&action.action_log_entry);
+    let _ = patch_cached_device_statuses(&store, &action.device_id, &action.statuses);
+    Ok(action)
+}
+
+#[tauri::command]
 pub async fn save_device_alias(
     app: AppHandle,
     payload: SaveDeviceAliasPayload,
@@ -312,6 +337,31 @@ fn normalize_device_order(device_ids: Vec<String>) -> Vec<String> {
         }
         acc
     })
+}
+
+fn resolve_cached_controllable_channels(
+    store: &LocalStore,
+    device_id: &str,
+) -> Result<Vec<String>, AppError> {
+    let snapshot = store.load_cached_devices()?.ok_or_else(|| {
+        AppError::UnexpectedResponse("Device cache is empty. Refresh devices first.".into())
+    })?;
+
+    snapshot
+        .devices
+        .iter()
+        .find(|device| device.id == device_id)
+        .map(|device| {
+            device
+                .channels
+                .iter()
+                .filter(|channel| channel.controllable)
+                .map(|channel| channel.code.clone())
+                .collect::<Vec<_>>()
+        })
+        .ok_or_else(|| {
+            AppError::UnexpectedResponse("Unable to find cached device channels.".into())
+        })
 }
 
 fn patch_cached_device_statuses(

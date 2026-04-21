@@ -12,6 +12,8 @@ import type {
   SaveChannelAliasPayload,
   SaveDeviceAliasPayload,
   SaveUiPreferencesPayload,
+  SetDeviceChannelsPayload,
+  SetDeviceChannelsResult,
   ToggleChannelPayload,
   ToggleChannelResult,
   UiPreferences,
@@ -27,6 +29,7 @@ export interface DesktopApi {
   refreshAllDevices(): Promise<Device[]>;
   refreshDeviceStatuses(deviceIds: string[]): Promise<DeviceStatusUpdate[]>;
   toggleChannel(payload: ToggleChannelPayload): Promise<ToggleChannelResult>;
+  setDeviceChannels(payload: SetDeviceChannelsPayload): Promise<SetDeviceChannelsResult>;
   saveDeviceAlias(payload: SaveDeviceAliasPayload): Promise<void>;
   saveChannelAlias(payload: SaveChannelAliasPayload): Promise<void>;
   saveUiPreferences(payload: SaveUiPreferencesPayload): Promise<UiPreferences>;
@@ -68,6 +71,10 @@ class TauriDesktopApi implements DesktopApi {
 
   toggleChannel(payload: ToggleChannelPayload): Promise<ToggleChannelResult> {
     return this.command<ToggleChannelResult>("toggle_channel", { payload });
+  }
+
+  setDeviceChannels(payload: SetDeviceChannelsPayload): Promise<SetDeviceChannelsResult> {
+    return this.command<SetDeviceChannelsResult>("set_device_channels", { payload });
   }
 
   saveDeviceAlias(payload: SaveDeviceAliasPayload): Promise<void> {

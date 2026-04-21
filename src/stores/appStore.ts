@@ -10,6 +10,7 @@ import type {
   SaveChannelAliasPayload,
   SaveDeviceAliasPayload,
   DeviceStatusUpdate,
+  SetDeviceChannelsResult,
   ToastMessage,
   UiPreferences,
 } from "../types/models";
@@ -418,6 +419,52 @@ export class AppStore {
     }
   }
 
+  async setDeviceChannels(deviceId: string, value: boolean): Promise<void> {
+    const device = this.state.devices.find((entry) => entry.id === deviceId);
+    if (!device) {
+      return;
+    }
+
+    const channelCodes = getControllableChannelCodes(device);
+    if (channelCodes.length === 0) {
+      return;
+    }
+
+    const previousDevices = this.state.devices;
+    const nextBusyChannels = { ...this.state.busyChannels };
+    for (const channelCode of channelCodes) {
+      nextBusyChannels[`${deviceId}:${channelCode}`] = true;
+    }
+
+    this.patchState({
+      devices: applyOptimisticDeviceState(previousDevices, deviceId, channelCodes, value),
+      busyChannels: nextBusyChannels,
+    });
+
+    try {
+      const result = await this.api.setDeviceChannels({
+        deviceId,
+        value,
+      });
+      this.applyDeviceChannelResult(result);
+      void this.refreshStatuses([result.deviceId], { background: true, delayMs: 220 });
+    } catch (error) {
+      this.patchState({
+        devices: previousDevices,
+      });
+      this.pushToast({
+        tone: "error",
+        message: toMessage(error),
+      });
+    } finally {
+      const busyChannels = { ...this.state.busyChannels };
+      for (const channelCode of channelCodes) {
+        delete busyChannels[`${deviceId}:${channelCode}`];
+      }
+      this.patchState({ busyChannels });
+    }
+  }
+
   async refreshStatuses(
     deviceIds?: string[],
     options: RefreshOptions & { delayMs?: number } = {},
@@ -551,6 +598,13 @@ export class AppStore {
     });
   }
 
+  private applyDeviceChannelResult(result: SetDeviceChannelsResult): void {
+    this.patchState({
+      devices: applyStatusesToDevices(this.state.devices, result.deviceId, result.statuses),
+      actionLog: [result.actionLogEntry, ...this.state.actionLog].slice(0, 50),
+    });
+  }
+
   private applyBootstrap(payload: BootstrapPayload): void {
     const preferences = normalizeUiPreferences(payload.uiPreferences);
     this.patchState({
@@ -609,12 +663,22 @@ function applyOptimisticChannelState(
   channelCode: string,
   value: boolean,
 ): Device[] {
+  return applyOptimisticDeviceState(devices, deviceId, [channelCode], value);
+}
+
+function applyOptimisticDeviceState(
+  devices: Device[],
+  deviceId: string,
+  channelCodes: string[],
+  value: boolean,
+): Device[] {
+  const channelCodeSet = new Set(channelCodes);
   return devices.map((device) =>
     device.id === deviceId
       ? {
           ...device,
           channels: device.channels.map((channel) =>
-            channel.code === channelCode
+            channelCodeSet.has(channel.code)
               ? {
                   ...channel,
                   currentState: value,
@@ -624,6 +688,12 @@ function applyOptimisticChannelState(
         }
       : device,
   );
+}
+
+function getControllableChannelCodes(device: Device): string[] {
+  return device.channels
+    .filter((channel) => channel.controllable)
+    .map((channel) => channel.code);
 }
 
 function applyStatusesToDevices(

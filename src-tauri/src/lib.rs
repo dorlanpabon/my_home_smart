@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 use commands::{
     get_action_log, get_config_masked, list_devices, load_bootstrap, refresh_all_devices,
     refresh_device_statuses, save_channel_alias, save_config, save_device_alias,
-    save_ui_preferences, test_connection, toggle_channel,
+    save_ui_preferences, set_device_channels, test_connection, toggle_channel,
 };
 use services::tuya::auth::TokenCache;
 
@@ -40,6 +40,7 @@ pub fn run() {
             refresh_all_devices,
             refresh_device_statuses,
             toggle_channel,
+            set_device_channels,
             save_device_alias,
             save_channel_alias,
             save_ui_preferences,

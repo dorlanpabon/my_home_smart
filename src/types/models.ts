@@ -120,7 +120,18 @@ export interface ToggleChannelPayload {
   value: boolean;
 }
 
+export interface SetDeviceChannelsPayload {
+  deviceId: string;
+  value: boolean;
+}
+
 export interface ToggleChannelResult {
+  deviceId: string;
+  statuses: TuyaStatus[];
+  actionLogEntry: ActionLogEntry;
+}
+
+export interface SetDeviceChannelsResult {
   deviceId: string;
   statuses: TuyaStatus[];
   actionLogEntry: ActionLogEntry;
