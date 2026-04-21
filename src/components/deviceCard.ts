@@ -70,14 +70,32 @@ function renderDeveloperDeviceCard(
             <p class="device-card__subtitle">${escapeHtml(formatDeviceSubtitle(device))}</p>
           </div>
         </div>
-        <button
-          class="icon-button"
-          data-action="copy-device-id"
-          data-device-id="${escapeHtml(device.id)}"
-          title="Copy device id"
-        >
-          Copy id
-        </button>
+        <div class="device-card__actions">
+          <button
+            class="icon-button icon-button--square"
+            data-action="move-device-up"
+            data-device-id="${escapeHtml(device.id)}"
+            title="Move device up"
+          >
+            ↑
+          </button>
+          <button
+            class="icon-button icon-button--square"
+            data-action="move-device-down"
+            data-device-id="${escapeHtml(device.id)}"
+            title="Move device down"
+          >
+            ↓
+          </button>
+          <button
+            class="icon-button"
+            data-action="copy-device-id"
+            data-device-id="${escapeHtml(device.id)}"
+            title="Copy device id"
+          >
+            Copy id
+          </button>
+        </div>
       </div>
 
       <div class="device-card__meta">

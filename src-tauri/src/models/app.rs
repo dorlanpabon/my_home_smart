@@ -75,6 +75,7 @@ pub struct ChannelAlias {
 pub struct UiPreferences {
     pub view_mode: String,
     pub auto_refresh_seconds: u64,
+    pub device_order: Vec<String>,
 }
 
 impl Default for UiPreferences {
@@ -82,6 +83,7 @@ impl Default for UiPreferences {
         Self {
             view_mode: "user".into(),
             auto_refresh_seconds: 0,
+            device_order: Vec::new(),
         }
     }
 }
@@ -261,4 +263,5 @@ pub struct SaveChannelAliasPayload {
 pub struct SaveUiPreferencesPayload {
     pub view_mode: Option<String>,
     pub auto_refresh_seconds: Option<u64>,
+    pub device_order: Option<Vec<String>>,
 }

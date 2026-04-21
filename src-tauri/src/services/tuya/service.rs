@@ -64,7 +64,7 @@ impl TuyaService {
         .try_collect::<Vec<_>>()
         .await?;
 
-        devices.sort_by(|left, right| left.name.to_lowercase().cmp(&right.name.to_lowercase()));
+        sort_devices_by_order(&mut devices, &metadata.ui_preferences.device_order);
         Ok(devices)
     }
 
@@ -453,11 +453,12 @@ fn current_timestamp_ms() -> u64 {
 
 #[cfg(test)]
 mod tests {
+    use crate::models::app::Device;
     use serde_json::json;
 
     use crate::models::tuya::TuyaStatus;
 
-    use super::{ensure_channel_status, status_value_as_bool};
+    use super::{ensure_channel_status, sort_devices_by_order, status_value_as_bool};
 
     #[test]
     fn ensure_channel_status_overwrites_stale_value() {
@@ -487,4 +488,61 @@ mod tests {
         assert_eq!(status_value_as_bool(&json!("false")), Some(false));
         assert_eq!(status_value_as_bool(&json!("other")), None);
     }
+
+    #[test]
+    fn sort_devices_by_order_prioritizes_saved_device_order() {
+        let mut devices = vec![make_device("b", "Beta"), make_device("a", "Alpha")];
+
+        sort_devices_by_order(&mut devices, &["b".into()]);
+
+        assert_eq!(devices[0].id, "b");
+        assert_eq!(devices[1].id, "a");
+    }
+
+    fn make_device(id: &str, name: &str) -> Device {
+        Device {
+            id: id.into(),
+            name: name.into(),
+            online: true,
+            category: None,
+            product_id: None,
+            inferred_type: "switch".into(),
+            gang_count: 1,
+            channels: Vec::new(),
+            raw: crate::models::app::RawDeviceData {
+                summary: json!({ "name": name }),
+                details: json!({}),
+                functions: Vec::new(),
+                status: Vec::new(),
+                capabilities: Vec::new(),
+                specifications: json!({}),
+            },
+            metadata: None,
+        }
+    }
+}
+
+fn sort_devices_by_order(devices: &mut [Device], device_order: &[String]) {
+    if device_order.is_empty() {
+        devices.sort_by(|left, right| left.name.to_lowercase().cmp(&right.name.to_lowercase()));
+        return;
+    }
+
+    let order_index = device_order
+        .iter()
+        .enumerate()
+        .map(|(index, device_id)| (device_id.as_str(), index))
+        .collect::<std::collections::HashMap<_, _>>();
+
+    devices.sort_by(|left, right| {
+        match (
+            order_index.get(left.id.as_str()),
+            order_index.get(right.id.as_str()),
+        ) {
+            (Some(left_index), Some(right_index)) => left_index.cmp(right_index),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => left.name.to_lowercase().cmp(&right.name.to_lowercase()),
+        }
+    });
 }

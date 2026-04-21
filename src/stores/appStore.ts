@@ -45,6 +45,7 @@ const DEFAULT_STATE: AppState = {
   uiPreferences: {
     viewMode: "user",
     autoRefreshSeconds: 0,
+    deviceOrder: [],
   },
   actionLog: [],
   busyChannels: {},
@@ -200,6 +201,57 @@ export class AppStore {
     }
   }
 
+  async moveDevice(deviceId: string, direction: -1 | 1): Promise<void> {
+    const currentOrder = this.state.devices.map((device) => device.id);
+    const index = currentOrder.indexOf(deviceId);
+    const nextIndex = index + direction;
+
+    if (index < 0 || nextIndex < 0 || nextIndex >= currentOrder.length) {
+      return;
+    }
+
+    const reorderedDevices = [...this.state.devices];
+    const [movedDevice] = reorderedDevices.splice(index, 1);
+    if (!movedDevice) {
+      return;
+    }
+    reorderedDevices.splice(nextIndex, 0, movedDevice);
+
+    const previousDevices = this.state.devices;
+    const previousPreferences = this.state.uiPreferences;
+    const nextDeviceOrder = reorderedDevices.map((device) => device.id);
+
+    this.patchState({
+      devices: reorderedDevices,
+      uiPreferences: {
+        ...this.state.uiPreferences,
+        deviceOrder: nextDeviceOrder,
+      },
+    });
+
+    if (!this.api.isAvailable()) {
+      return;
+    }
+
+    try {
+      const preferences = await this.api.saveUiPreferences({
+        deviceOrder: nextDeviceOrder,
+      });
+      this.patchState({
+        uiPreferences: normalizeUiPreferences(preferences),
+      });
+    } catch (error) {
+      this.patchState({
+        devices: previousDevices,
+        uiPreferences: previousPreferences,
+      });
+      this.pushToast({
+        tone: "error",
+        message: toMessage(error),
+      });
+    }
+  }
+
   async testConnection(): Promise<void> {
     this.patchState({ testingConnection: true });
     try {
@@ -286,7 +338,7 @@ export class AppStore {
           bootstrapping: false,
           refreshing: false,
           hasConfig: true,
-          devices,
+          devices: orderDevicesByPreference(devices, this.state.uiPreferences.deviceOrder),
           connection: {
             state: "connected",
             message: background
@@ -500,6 +552,7 @@ export class AppStore {
   }
 
   private applyBootstrap(payload: BootstrapPayload): void {
+    const preferences = normalizeUiPreferences(payload.uiPreferences);
     this.patchState({
       bootstrapping: false,
       hasConfig: payload.hasConfig,
@@ -511,8 +564,8 @@ export class AppStore {
         regionLabel: payload.config?.regionLabel ?? DEFAULT_CONFIG.regionLabel,
       },
       configOpen: !payload.hasConfig,
-      devices: payload.devices,
-      uiPreferences: normalizeUiPreferences(payload.uiPreferences),
+      devices: orderDevicesByPreference(payload.devices, preferences.deviceOrder),
+      uiPreferences: preferences,
       actionLog: payload.actionLog,
       connection: payload.connection,
     });
@@ -695,12 +748,53 @@ function normalizeAutoRefreshSeconds(
   }
 }
 
+function normalizeDeviceOrder(value: string[] | undefined): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.reduce<string[]>((acc, entry) => {
+    const trimmed = entry.trim();
+    if (trimmed && !acc.includes(trimmed)) {
+      acc.push(trimmed);
+    }
+    return acc;
+  }, []);
+}
+
+function orderDevicesByPreference(
+  devices: Device[],
+  deviceOrder: UiPreferences["deviceOrder"],
+): Device[] {
+  if (deviceOrder.length === 0) {
+    return devices;
+  }
+
+  const orderIndex = new Map(deviceOrder.map((deviceId, index) => [deviceId, index]));
+  return [...devices].sort((left, right) => {
+    const leftIndex = orderIndex.get(left.id);
+    const rightIndex = orderIndex.get(right.id);
+
+    if (leftIndex !== undefined && rightIndex !== undefined) {
+      return leftIndex - rightIndex;
+    }
+    if (leftIndex !== undefined) {
+      return -1;
+    }
+    if (rightIndex !== undefined) {
+      return 1;
+    }
+    return left.name.localeCompare(right.name);
+  });
+}
+
 function normalizeUiPreferences(
   preferences: Partial<UiPreferences>,
 ): UiPreferences {
   return {
     viewMode: normalizeViewMode(preferences.viewMode),
     autoRefreshSeconds: normalizeAutoRefreshSeconds(preferences.autoRefreshSeconds),
+    deviceOrder: normalizeDeviceOrder(preferences.deviceOrder),
   };
 }
 
