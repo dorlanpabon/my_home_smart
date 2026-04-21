@@ -109,6 +109,7 @@ export interface BootstrapPayload {
   actionLog: ActionLogEntry[];
   devices: Device[];
   connection: ConnectionStatus;
+  usesCachedDevices?: boolean;
 }
 
 export interface ToggleChannelPayload {
@@ -121,6 +122,11 @@ export interface ToggleChannelResult {
   deviceId: string;
   statuses: TuyaStatus[];
   actionLogEntry: ActionLogEntry;
+}
+
+export interface DeviceStatusUpdate {
+  deviceId: string;
+  statuses: TuyaStatus[];
 }
 
 export interface SaveDeviceAliasPayload {

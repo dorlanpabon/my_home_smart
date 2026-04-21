@@ -9,11 +9,15 @@ import type {
   DeviceChannel,
   SaveChannelAliasPayload,
   SaveDeviceAliasPayload,
+  DeviceStatusUpdate,
   ToastMessage,
   UiPreferences,
 } from "../types/models";
 
 type Listener = (state: AppState) => void;
+interface RefreshOptions {
+  background?: boolean;
+}
 
 const DEFAULT_CONFIG: AppConfig = {
   clientId: "",
@@ -50,6 +54,8 @@ export class AppStore {
   private state: AppState = { ...DEFAULT_STATE };
   private readonly listeners = new Set<Listener>();
   private readonly api: DesktopApi;
+  private refreshPromise: Promise<void> | null = null;
+  private statusRefreshPromise: Promise<void> | null = null;
 
   constructor(api: DesktopApi = desktopApi) {
     this.api = api;
@@ -227,41 +233,66 @@ export class AppStore {
   }
 
   async refreshDevices(): Promise<void> {
+    return this.refreshDevicesWithOptions();
+  }
+
+  private async refreshDevicesWithOptions(options: RefreshOptions = {}): Promise<void> {
     if (!this.api.isAvailable()) {
       return;
     }
 
-    this.patchState({ refreshing: true });
-    try {
-      const devices = await this.api.refreshAllDevices();
-      const actionLog = await this.api.getActionLog();
-      this.patchState({
-        bootstrapping: false,
-        refreshing: false,
-        hasConfig: true,
-        devices,
-        actionLog,
-        connection: {
-          state: "connected",
-          message: "Devices refreshed from Tuya Cloud.",
-          lastCheckedAt: Date.now(),
-        },
-      });
-    } catch (error) {
-      this.patchState({
-        bootstrapping: false,
-        refreshing: false,
-        connection: {
-          state: "error",
-          message: toMessage(error),
-          lastCheckedAt: Date.now(),
-        },
-      });
-      this.pushToast({
-        tone: "error",
-        message: toMessage(error),
-      });
+    if (this.refreshPromise) {
+      await this.refreshPromise;
+      return;
     }
+
+    const { background = false } = options;
+    const hadDevices = this.state.devices.length > 0;
+    this.patchState({ refreshing: true });
+
+    this.refreshPromise = (async () => {
+      try {
+        const devices = await this.api.refreshAllDevices();
+        this.patchState({
+          bootstrapping: false,
+          refreshing: false,
+          hasConfig: true,
+          devices,
+          connection: {
+            state: "connected",
+            message: background
+              ? "Device state updated from Tuya Cloud."
+              : "Devices refreshed from Tuya Cloud.",
+            lastCheckedAt: Date.now(),
+          },
+        });
+      } catch (error) {
+        const message = toMessage(error);
+        const preserveVisibleDevices = background && hadDevices;
+        this.patchState({
+          bootstrapping: false,
+          refreshing: false,
+          connection: {
+            state: "error",
+            message: preserveVisibleDevices
+              ? `${message} Showing cached devices.`
+              : message,
+            lastCheckedAt: Date.now(),
+          },
+        });
+
+        if (!preserveVisibleDevices) {
+          this.pushToast({
+            tone: "error",
+            message,
+          });
+        }
+      } finally {
+        this.refreshPromise = null;
+      }
+    })();
+
+    await this.refreshPromise;
   }
 
   async toggleChannel(
@@ -290,6 +321,7 @@ export class AppStore {
         devices: applyStatusesToDevices(this.state.devices, result.deviceId, result.statuses),
         actionLog: [result.actionLogEntry, ...this.state.actionLog].slice(0, 50),
       });
+      void this.refreshStatuses([result.deviceId], { background: true, delayMs: 220 });
     } catch (error) {
       this.patchState({
         devices: previousDevices,
@@ -303,6 +335,70 @@ export class AppStore {
       delete busyChannels[busyKey];
       this.patchState({ busyChannels });
     }
+  }
+
+  async refreshStatuses(
+    deviceIds?: string[],
+    options: RefreshOptions & { delayMs?: number } = {},
+  ): Promise<void> {
+    if (!this.api.isAvailable()) {
+      return;
+    }
+
+    const ids = Array.from(
+      new Set(
+        (deviceIds ?? this.state.devices.map((device) => device.id)).filter(
+          (id) => id.trim().length > 0,
+        ),
+      ),
+    );
+
+    if (ids.length === 0) {
+      return;
+    }
+
+    if (this.statusRefreshPromise) {
+      await this.statusRefreshPromise;
+      return;
+    }
+
+    const { background = true, delayMs = 0 } = options;
+    const hadDevices = this.state.devices.length > 0;
+
+    this.statusRefreshPromise = (async () => {
+      try {
+        if (delayMs > 0) {
+          await wait(delayMs);
+        }
+
+        const updates = await this.api.refreshDeviceStatuses(ids);
+        if (updates.length === 0) {
+          return;
+        }
+
+        this.patchState({
+          devices: applyDeviceStatusUpdates(this.state.devices, updates),
+          connection: {
+            state: "connected",
+            message: background
+              ? "Device state synchronized from Tuya Cloud."
+              : "Device state refreshed from Tuya Cloud.",
+            lastCheckedAt: Date.now(),
+          },
+        });
+      } catch (error) {
+        if (!background || !hadDevices) {
+          this.pushToast({
+            tone: "error",
+            message: toMessage(error),
+          });
+        }
+      } finally {
+        this.statusRefreshPromise = null;
+      }
+    })();
+
+    await this.statusRefreshPromise;
   }
 
   async saveDeviceAlias(payload: SaveDeviceAliasPayload): Promise<void> {
@@ -393,13 +489,23 @@ export class AppStore {
       actionLog: payload.actionLog,
       connection: payload.connection,
     });
+
+    if (payload.hasConfig && payload.usesCachedDevices && this.api.isAvailable()) {
+      void this.refreshStatuses(undefined, { background: true });
+    }
   }
 
   private patchState(patch: Partial<AppState>): void {
-    this.state = {
+    const nextState = {
       ...this.state,
       ...patch,
     };
+
+    if (!hasStateChanges(this.state, nextState, Object.keys(patch) as (keyof AppState)[])) {
+      return;
+    }
+
+    this.state = nextState;
     for (const listener of this.listeners) {
       listener(this.state);
     }
@@ -470,6 +576,42 @@ function applyStatusesToDevices(
   });
 }
 
+function applyDeviceStatusUpdates(
+  devices: Device[],
+  updates: DeviceStatusUpdate[],
+): Device[] {
+  const updateMap = new Map(
+    updates.map((update) => [update.deviceId, update.statuses] as const),
+  );
+
+  return devices.map((device) => {
+    const statuses = updateMap.get(device.id);
+    if (!statuses) {
+      return device;
+    }
+
+    const statusMap = new Map(statuses.map((status) => [status.code, status.value] as const));
+    return {
+      ...device,
+      channels: device.channels.map((channel) => ({
+        ...channel,
+        currentState:
+          typeof statusMap.get(channel.code) === "boolean"
+            ? (statusMap.get(channel.code) as boolean)
+            : channel.currentState,
+      })),
+    };
+  });
+}
+
+function hasStateChanges(
+  previous: AppState,
+  next: AppState,
+  keys: (keyof AppState)[],
+): boolean {
+  return keys.some((key) => previous[key] !== next[key]);
+}
+
 function resolveCloudName(device: Device): string {
   const summary = device.raw.summary as { name?: unknown } | undefined;
   const details = device.raw.details as { name?: unknown } | undefined;
@@ -522,4 +664,8 @@ function toMessage(error: unknown): string {
   }
 
   return "Unexpected application error.";
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }

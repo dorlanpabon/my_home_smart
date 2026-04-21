@@ -183,6 +183,15 @@ pub struct BootstrapPayload {
     pub action_log: Vec<ActionLogEntry>,
     pub devices: Vec<Device>,
     pub connection: ConnectionStatus,
+    #[serde(default)]
+    pub uses_cached_devices: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CachedDevicesSnapshot {
+    pub devices: Vec<Device>,
+    pub updated_at_ms: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -221,6 +230,13 @@ pub struct ToggleChannelResult {
     pub device_id: String,
     pub statuses: Vec<TuyaStatus>,
     pub action_log_entry: ActionLogEntry,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeviceStatusUpdate {
+    pub device_id: String,
+    pub statuses: Vec<TuyaStatus>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
