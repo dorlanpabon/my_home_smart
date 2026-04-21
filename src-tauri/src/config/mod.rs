@@ -107,9 +107,14 @@ impl LocalStore {
         payload: &SaveUiPreferencesPayload,
     ) -> AppResult<UiPreferences> {
         let mut metadata = self.load_metadata()?;
-        metadata.ui_preferences = UiPreferences {
-            view_mode: payload.view_mode.trim().to_string(),
-        };
+        if let Some(view_mode) = &payload.view_mode {
+            metadata.ui_preferences.view_mode = view_mode.trim().to_string();
+        }
+
+        if let Some(auto_refresh_seconds) = payload.auto_refresh_seconds {
+            metadata.ui_preferences.auto_refresh_seconds = auto_refresh_seconds;
+        }
+
         self.save_metadata(&metadata)?;
         Ok(metadata.ui_preferences)
     }

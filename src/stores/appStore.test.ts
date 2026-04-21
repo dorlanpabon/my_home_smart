@@ -14,6 +14,7 @@ const bootstrapPayload: BootstrapPayload = {
   },
   uiPreferences: {
     viewMode: "developer",
+    autoRefreshSeconds: 0,
   },
   actionLog: [],
   devices: [],
@@ -65,7 +66,12 @@ function createApi(overrides: Partial<DesktopApi> = {}): DesktopApi {
     toggleChannel: () => Promise.reject(new Error("not used in this test")),
     saveDeviceAlias: () => Promise.resolve(),
     saveChannelAlias: () => Promise.resolve(),
-    saveUiPreferences: ({ viewMode }) => Promise.resolve({ viewMode }),
+    saveUiPreferences: ({ viewMode, autoRefreshSeconds }) =>
+      Promise.resolve({
+        viewMode: viewMode ?? bootstrapPayload.uiPreferences.viewMode,
+        autoRefreshSeconds:
+          autoRefreshSeconds ?? bootstrapPayload.uiPreferences.autoRefreshSeconds,
+      }),
     getActionLog: () => Promise.resolve([]),
     ...overrides,
   };
@@ -88,6 +94,14 @@ describe("AppStore", () => {
     store.updateConfigDraft("clientId", "new-id");
 
     expect(store.getState().configDraft.clientId).toBe("new-id");
+  });
+
+  it("saves auto refresh preference", async () => {
+    const store = new AppStore(createApi());
+
+    await store.setAutoRefreshSeconds(30);
+
+    expect(store.getState().uiPreferences.autoRefreshSeconds).toBe(30);
   });
 
   it("refreshes in background after loading cached bootstrap devices", async () => {

@@ -74,12 +74,14 @@ pub struct ChannelAlias {
 #[serde(default, rename_all = "camelCase")]
 pub struct UiPreferences {
     pub view_mode: String,
+    pub auto_refresh_seconds: u64,
 }
 
 impl Default for UiPreferences {
     fn default() -> Self {
         Self {
             view_mode: "user".into(),
+            auto_refresh_seconds: 0,
         }
     }
 }
@@ -257,5 +259,6 @@ pub struct SaveChannelAliasPayload {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SaveUiPreferencesPayload {
-    pub view_mode: String,
+    pub view_mode: Option<String>,
+    pub auto_refresh_seconds: Option<u64>,
 }

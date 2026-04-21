@@ -246,7 +246,10 @@ pub async fn save_ui_preferences(
 ) -> Result<crate::models::app::UiPreferences, AppErrorPayload> {
     let store = LocalStore::new(&app);
     let payload = SaveUiPreferencesPayload {
-        view_mode: normalize_view_mode(&payload.view_mode),
+        view_mode: payload.view_mode.as_deref().map(normalize_view_mode),
+        auto_refresh_seconds: payload
+            .auto_refresh_seconds
+            .map(normalize_auto_refresh_seconds),
     };
     store
         .save_ui_preferences(&payload)
@@ -286,6 +289,13 @@ fn normalize_view_mode(value: &str) -> String {
         "developer" | "detailed" => "developer".into(),
         "user" | "compact" => "user".into(),
         _ => "user".into(),
+    }
+}
+
+fn normalize_auto_refresh_seconds(value: u64) -> u64 {
+    match value {
+        15 | 30 | 60 => value,
+        _ => 0,
     }
 }
 

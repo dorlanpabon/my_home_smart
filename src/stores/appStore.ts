@@ -44,6 +44,7 @@ const DEFAULT_STATE: AppState = {
   statusFilter: "all",
   uiPreferences: {
     viewMode: "user",
+    autoRefreshSeconds: 0,
   },
   actionLog: [],
   busyChannels: {},
@@ -159,9 +160,37 @@ export class AppStore {
         viewMode: normalized,
       });
       this.patchState({
-        uiPreferences: {
-          viewMode: normalizeViewMode(preferences.viewMode),
-        },
+        uiPreferences: normalizeUiPreferences(preferences),
+      });
+    } catch (error) {
+      this.pushToast({
+        tone: "error",
+        message: toMessage(error),
+      });
+    }
+  }
+
+  async setAutoRefreshSeconds(
+    autoRefreshSeconds: UiPreferences["autoRefreshSeconds"],
+  ): Promise<void> {
+    const normalized = normalizeAutoRefreshSeconds(autoRefreshSeconds);
+    this.patchState({
+      uiPreferences: {
+        ...this.state.uiPreferences,
+        autoRefreshSeconds: normalized,
+      },
+    });
+
+    if (!this.api.isAvailable()) {
+      return;
+    }
+
+    try {
+      const preferences = await this.api.saveUiPreferences({
+        autoRefreshSeconds: normalized,
+      });
+      this.patchState({
+        uiPreferences: normalizeUiPreferences(preferences),
       });
     } catch (error) {
       this.pushToast({
@@ -483,9 +512,7 @@ export class AppStore {
       },
       configOpen: !payload.hasConfig,
       devices: payload.devices,
-      uiPreferences: {
-        viewMode: normalizeViewMode(payload.uiPreferences.viewMode),
-      },
+      uiPreferences: normalizeUiPreferences(payload.uiPreferences),
       actionLog: payload.actionLog,
       connection: payload.connection,
     });
@@ -653,6 +680,28 @@ function normalizeViewMode(value: string | undefined): UiPreferences["viewMode"]
     default:
       return "user";
   }
+}
+
+function normalizeAutoRefreshSeconds(
+  value: number | undefined,
+): UiPreferences["autoRefreshSeconds"] {
+  switch (value) {
+    case 15:
+    case 30:
+    case 60:
+      return value;
+    default:
+      return 0;
+  }
+}
+
+function normalizeUiPreferences(
+  preferences: Partial<UiPreferences>,
+): UiPreferences {
+  return {
+    viewMode: normalizeViewMode(preferences.viewMode),
+    autoRefreshSeconds: normalizeAutoRefreshSeconds(preferences.autoRefreshSeconds),
+  };
 }
 
 function toMessage(error: unknown): string {
