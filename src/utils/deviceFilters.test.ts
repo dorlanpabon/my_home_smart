@@ -58,4 +58,16 @@ describe("filterDevices", () => {
     expect(result).toHaveLength(1);
     expect(result[0]?.id).toBe("alpha");
   });
+
+  it("supports the favorites filter", () => {
+    const devices = [
+      makeDevice("alpha", "Living Room", true, "Desk lamp"),
+      makeDevice("beta", "Kitchen", true, "Main light"),
+    ];
+
+    const result = filterDevices(devices, "", "favorites", ["beta"]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]?.id).toBe("beta");
+  });
 });

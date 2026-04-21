@@ -47,6 +47,7 @@ const DEFAULT_STATE: AppState = {
     viewMode: "user",
     autoRefreshSeconds: 0,
     deviceOrder: [],
+    favoriteDeviceIds: [],
   },
   actionLog: [],
   busyChannels: {},
@@ -81,6 +82,7 @@ export class AppStore {
       this.state.devices,
       this.state.searchQuery,
       this.state.statusFilter,
+      this.state.uiPreferences.favoriteDeviceIds,
     );
   }
 
@@ -142,6 +144,46 @@ export class AppStore {
 
   setStatusFilter(filter: AppState["statusFilter"]): void {
     this.patchState({ statusFilter: filter });
+  }
+
+  async toggleFavoriteDevice(deviceId: string): Promise<void> {
+    const currentFavorites = this.state.uiPreferences.favoriteDeviceIds;
+    const isFavorite = currentFavorites.includes(deviceId);
+    const favoriteDeviceIds = isFavorite
+      ? currentFavorites.filter((entry) => entry !== deviceId)
+      : [deviceId, ...currentFavorites];
+    const previousPreferences = this.state.uiPreferences;
+
+    this.patchState({
+      devices: orderDevicesByPreference(this.state.devices, this.state.uiPreferences.deviceOrder, favoriteDeviceIds),
+      uiPreferences: {
+        ...this.state.uiPreferences,
+        favoriteDeviceIds,
+      },
+    });
+
+    if (!this.api.isAvailable()) {
+      return;
+    }
+
+    try {
+      const preferences = await this.api.saveUiPreferences({
+        favoriteDeviceIds,
+      });
+      this.patchState({
+        devices: orderDevicesByPreference(this.state.devices, preferences.deviceOrder, preferences.favoriteDeviceIds),
+        uiPreferences: normalizeUiPreferences(preferences),
+      });
+    } catch (error) {
+      this.patchState({
+        devices: orderDevicesByPreference(this.state.devices, previousPreferences.deviceOrder, previousPreferences.favoriteDeviceIds),
+        uiPreferences: previousPreferences,
+      });
+      this.pushToast({
+        tone: "error",
+        message: toMessage(error),
+      });
+    }
   }
 
   async setViewMode(viewMode: UiPreferences["viewMode"]): Promise<void> {
@@ -334,12 +376,16 @@ export class AppStore {
 
     this.refreshPromise = (async () => {
       try {
-        const devices = await this.api.refreshAllDevices();
-        this.patchState({
+      const devices = await this.api.refreshAllDevices();
+      this.patchState({
           bootstrapping: false,
           refreshing: false,
           hasConfig: true,
-          devices: orderDevicesByPreference(devices, this.state.uiPreferences.deviceOrder),
+          devices: orderDevicesByPreference(
+            devices,
+            this.state.uiPreferences.deviceOrder,
+            this.state.uiPreferences.favoriteDeviceIds,
+          ),
           connection: {
             state: "connected",
             message: background
@@ -618,7 +664,11 @@ export class AppStore {
         regionLabel: payload.config?.regionLabel ?? DEFAULT_CONFIG.regionLabel,
       },
       configOpen: !payload.hasConfig,
-      devices: orderDevicesByPreference(payload.devices, preferences.deviceOrder),
+      devices: orderDevicesByPreference(
+        payload.devices,
+        preferences.deviceOrder,
+        preferences.favoriteDeviceIds,
+      ),
       uiPreferences: preferences,
       actionLog: payload.actionLog,
       connection: payload.connection,
@@ -835,13 +885,18 @@ function normalizeDeviceOrder(value: string[] | undefined): string[] {
 function orderDevicesByPreference(
   devices: Device[],
   deviceOrder: UiPreferences["deviceOrder"],
+  favoriteDeviceIds: UiPreferences["favoriteDeviceIds"],
 ): Device[] {
-  if (deviceOrder.length === 0) {
-    return devices;
-  }
-
+  const favoriteSet = new Set(favoriteDeviceIds);
   const orderIndex = new Map(deviceOrder.map((deviceId, index) => [deviceId, index]));
   return [...devices].sort((left, right) => {
+    const leftFavorite = favoriteSet.has(left.id);
+    const rightFavorite = favoriteSet.has(right.id);
+
+    if (leftFavorite !== rightFavorite) {
+      return leftFavorite ? -1 : 1;
+    }
+
     const leftIndex = orderIndex.get(left.id);
     const rightIndex = orderIndex.get(right.id);
 
@@ -865,6 +920,7 @@ function normalizeUiPreferences(
     viewMode: normalizeViewMode(preferences.viewMode),
     autoRefreshSeconds: normalizeAutoRefreshSeconds(preferences.autoRefreshSeconds),
     deviceOrder: normalizeDeviceOrder(preferences.deviceOrder),
+    favoriteDeviceIds: normalizeDeviceOrder(preferences.favoriteDeviceIds),
   };
 }
 

@@ -3,6 +3,7 @@ import { escapeHtml } from "../utils/escape";
 import { formatDeviceSubtitle } from "../utils/format";
 import {
   renderBulbIcon,
+  renderFavoriteIcon,
   renderPowerIcon,
   renderSwitchIcon,
 } from "./icons";
@@ -10,20 +11,23 @@ import {
 interface DeviceCardOptions {
   viewMode: UiPreferences["viewMode"];
   busyChannels: Record<string, boolean>;
+  favoriteDeviceIds: string[];
 }
 
 export function renderDeviceCard(
   device: Device,
   options: DeviceCardOptions,
 ): string {
+  const favorite = options.favoriteDeviceIds.includes(device.id);
   return options.viewMode === "user"
-    ? renderUserDeviceCard(device, options.busyChannels)
-    : renderDeveloperDeviceCard(device, options.busyChannels);
+    ? renderUserDeviceCard(device, options.busyChannels, favorite)
+    : renderDeveloperDeviceCard(device, options.busyChannels, favorite);
 }
 
 function renderUserDeviceCard(
   device: Device,
   busyChannels: Record<string, boolean>,
+  favorite: boolean,
 ): string {
   const bulkActions = renderBulkActions(device, busyChannels);
   return `
@@ -37,6 +41,15 @@ function renderUserDeviceCard(
         <span class="device-card__presence ${device.online ? "is-online" : "is-offline"}">
           ${device.online ? "Online" : "Offline"}
         </span>
+        <button
+          class="icon-button icon-button--square device-card__favorite ${favorite ? "is-active" : ""}"
+          data-action="toggle-favorite-device"
+          data-device-id="${escapeHtml(device.id)}"
+          title="${favorite ? "Remove favorite" : "Add favorite"}"
+          aria-label="${favorite ? "Remove favorite" : "Add favorite"}"
+        >
+          ${renderFavoriteIcon(favorite)}
+        </button>
       </div>
 
       ${bulkActions}
@@ -57,6 +70,7 @@ function renderUserDeviceCard(
 function renderDeveloperDeviceCard(
   device: Device,
   busyChannels: Record<string, boolean>,
+  favorite: boolean,
 ): string {
   const bulkActions = renderBulkActions(device, busyChannels);
   return `
@@ -75,6 +89,15 @@ function renderDeveloperDeviceCard(
           </div>
         </div>
         <div class="device-card__actions">
+          <button
+            class="icon-button icon-button--square device-card__favorite ${favorite ? "is-active" : ""}"
+            data-action="toggle-favorite-device"
+            data-device-id="${escapeHtml(device.id)}"
+            title="${favorite ? "Remove favorite" : "Add favorite"}"
+            aria-label="${favorite ? "Remove favorite" : "Add favorite"}"
+          >
+            ${renderFavoriteIcon(favorite)}
+          </button>
           <button
             class="icon-button icon-button--square"
             data-action="move-device-up"

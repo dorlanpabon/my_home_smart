@@ -50,3 +50,11 @@ export function renderSettingsIcon(): string {
     </svg>
   `;
 }
+
+export function renderFavoriteIcon(active: boolean): string {
+  return `
+    <svg viewBox="0 0 24 24" aria-hidden="true" class="icon-svg">
+      <path d="M12 3.8l2.5 5 5.5.8-4 3.9.9 5.5-4.9-2.6-4.9 2.6.9-5.5-4-3.9 5.5-.8z" ${active ? 'fill="currentColor"' : ""} />
+    </svg>
+  `;
+}

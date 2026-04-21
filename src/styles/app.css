@@ -466,7 +466,7 @@ button:disabled {
 
 .device-card__user-head {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto 1fr auto auto;
   gap: 8px;
   align-items: center;
 }
@@ -532,6 +532,16 @@ button:disabled {
 
 .device-card__actions {
   margin-left: auto;
+}
+
+.device-card__favorite {
+  color: #8ea0c3;
+}
+
+.device-card__favorite.is-active {
+  color: var(--warm);
+  border-color: rgba(255, 199, 106, 0.26);
+  background: rgba(255, 199, 106, 0.1);
 }
 
 .device-card__bulk-actions {
