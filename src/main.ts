@@ -77,6 +77,16 @@ root.addEventListener("click", async (event) => {
         await copyText(actionTarget.dataset.deviceId);
       }
       break;
+    case "move-device-up":
+      if (actionTarget.dataset.deviceId) {
+        await store.moveDevice(actionTarget.dataset.deviceId, -1);
+      }
+      break;
+    case "move-device-down":
+      if (actionTarget.dataset.deviceId) {
+        await store.moveDevice(actionTarget.dataset.deviceId, 1);
+      }
+      break;
     case "dismiss-toast":
       if (actionTarget.dataset.toastId) {
         store.removeToast(actionTarget.dataset.toastId);

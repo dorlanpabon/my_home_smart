@@ -211,6 +211,7 @@ button:disabled {
 .device-card__header,
 .device-card__title,
 .device-card__title-row,
+.device-card__actions,
 .device-card__meta,
 .alias-form__row,
 .panel-heading,
@@ -527,6 +528,10 @@ button:disabled {
 .device-card__title-row {
   justify-content: space-between;
   width: 100%;
+}
+
+.device-card__actions {
+  margin-left: auto;
 }
 
 .device-card__meta {

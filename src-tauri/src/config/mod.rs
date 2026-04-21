@@ -115,6 +115,21 @@ impl LocalStore {
             metadata.ui_preferences.auto_refresh_seconds = auto_refresh_seconds;
         }
 
+        if let Some(device_order) = &payload.device_order {
+            metadata.ui_preferences.device_order = device_order
+                .iter()
+                .filter_map(|entry| {
+                    let trimmed = entry.trim();
+                    (!trimmed.is_empty()).then(|| trimmed.to_string())
+                })
+                .fold(Vec::<String>::new(), |mut acc, entry| {
+                    if !acc.iter().any(|current| current == &entry) {
+                        acc.push(entry);
+                    }
+                    acc
+                });
+        }
+
         self.save_metadata(&metadata)?;
         Ok(metadata.ui_preferences)
     }

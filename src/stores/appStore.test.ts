@@ -15,6 +15,7 @@ const bootstrapPayload: BootstrapPayload = {
   uiPreferences: {
     viewMode: "developer",
     autoRefreshSeconds: 0,
+    deviceOrder: [],
   },
   actionLog: [],
   devices: [],
@@ -66,11 +67,12 @@ function createApi(overrides: Partial<DesktopApi> = {}): DesktopApi {
     toggleChannel: () => Promise.reject(new Error("not used in this test")),
     saveDeviceAlias: () => Promise.resolve(),
     saveChannelAlias: () => Promise.resolve(),
-    saveUiPreferences: ({ viewMode, autoRefreshSeconds }) =>
+    saveUiPreferences: ({ viewMode, autoRefreshSeconds, deviceOrder }) =>
       Promise.resolve({
         viewMode: viewMode ?? bootstrapPayload.uiPreferences.viewMode,
         autoRefreshSeconds:
           autoRefreshSeconds ?? bootstrapPayload.uiPreferences.autoRefreshSeconds,
+        deviceOrder: deviceOrder ?? bootstrapPayload.uiPreferences.deviceOrder,
       }),
     getActionLog: () => Promise.resolve([]),
     ...overrides,
@@ -102,6 +104,37 @@ describe("AppStore", () => {
     await store.setAutoRefreshSeconds(30);
 
     expect(store.getState().uiPreferences.autoRefreshSeconds).toBe(30);
+  });
+
+  it("reorders devices and persists the saved order", async () => {
+    const saveUiPreferences = vi.fn().mockImplementation(({ deviceOrder }) =>
+      Promise.resolve({
+        ...bootstrapPayload.uiPreferences,
+        deviceOrder: deviceOrder ?? [],
+      }),
+    );
+
+    const store = new AppStore(
+      createApi({
+        loadBootstrap: () =>
+          Promise.resolve({
+            ...bootstrapPayload,
+            devices: [
+              { ...cachedDevice, id: "device-1", name: "Sala" },
+              { ...cachedDevice, id: "device-2", name: "Cocina" },
+            ],
+          }),
+        saveUiPreferences,
+      }),
+    );
+
+    await store.bootstrap();
+    await store.moveDevice("device-2", -1);
+
+    expect(store.getState().devices.map((device) => device.id)).toEqual(["device-2", "device-1"]);
+    expect(saveUiPreferences).toHaveBeenCalledWith({
+      deviceOrder: ["device-2", "device-1"],
+    });
   });
 
   it("refreshes in background after loading cached bootstrap devices", async () => {

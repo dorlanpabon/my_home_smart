@@ -250,10 +250,15 @@ pub async fn save_ui_preferences(
         auto_refresh_seconds: payload
             .auto_refresh_seconds
             .map(normalize_auto_refresh_seconds),
+        device_order: payload.device_order.map(normalize_device_order),
     };
-    store
+    let preferences = store
         .save_ui_preferences(&payload)
-        .map_err(AppErrorPayload::from)
+        .map_err(AppErrorPayload::from)?;
+    if let Some(device_order) = payload.device_order.as_ref() {
+        let _ = patch_cached_device_order(&store, device_order);
+    }
+    Ok(preferences)
 }
 
 #[tauri::command]
@@ -297,6 +302,16 @@ fn normalize_auto_refresh_seconds(value: u64) -> u64 {
         15 | 30 | 60 => value,
         _ => 0,
     }
+}
+
+fn normalize_device_order(device_ids: Vec<String>) -> Vec<String> {
+    device_ids.into_iter().fold(Vec::new(), |mut acc, entry| {
+        let trimmed = entry.trim();
+        if !trimmed.is_empty() && !acc.iter().any(|current| current == trimmed) {
+            acc.push(trimmed.to_string());
+        }
+        acc
+    })
 }
 
 fn patch_cached_device_statuses(
@@ -399,6 +414,47 @@ fn patch_cached_device_alias(
 
     store.save_cached_devices(&snapshot.devices)?;
     Ok(())
+}
+
+fn patch_cached_device_order(store: &LocalStore, device_order: &[String]) -> Result<(), AppError> {
+    let Some(mut snapshot) = store.load_cached_devices()? else {
+        return Ok(());
+    };
+
+    sort_devices_by_order(&mut snapshot.devices, device_order);
+    store.save_cached_devices(&snapshot.devices)?;
+    Ok(())
+}
+
+fn sort_devices_by_order(devices: &mut [crate::models::app::Device], device_order: &[String]) {
+    if device_order.is_empty() {
+        devices.sort_by(|left, right| {
+            resolve_cached_device_name(left)
+                .to_lowercase()
+                .cmp(&resolve_cached_device_name(right).to_lowercase())
+        });
+        return;
+    }
+
+    let order_index = device_order
+        .iter()
+        .enumerate()
+        .map(|(index, device_id)| (device_id.as_str(), index))
+        .collect::<std::collections::HashMap<_, _>>();
+
+    devices.sort_by(|left, right| {
+        match (
+            order_index.get(left.id.as_str()),
+            order_index.get(right.id.as_str()),
+        ) {
+            (Some(left_index), Some(right_index)) => left_index.cmp(right_index),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => resolve_cached_device_name(left)
+                .to_lowercase()
+                .cmp(&resolve_cached_device_name(right).to_lowercase()),
+        }
+    });
 }
 
 fn parse_status_bool(value: &serde_json::Value) -> Option<bool> {
