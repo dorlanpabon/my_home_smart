@@ -28,6 +28,7 @@ export interface UiPreferences {
   viewMode: "user" | "developer";
   autoRefreshSeconds: 0 | 15 | 30 | 60;
   deviceOrder: string[];
+  favoriteDeviceIds: string[];
 }
 
 export interface DeviceLocalMetadata {
@@ -157,6 +158,7 @@ export interface SaveUiPreferencesPayload {
   viewMode?: UiPreferences["viewMode"];
   autoRefreshSeconds?: UiPreferences["autoRefreshSeconds"];
   deviceOrder?: UiPreferences["deviceOrder"];
+  favoriteDeviceIds?: UiPreferences["favoriteDeviceIds"];
 }
 
 export interface AppErrorPayload {
@@ -183,7 +185,7 @@ export interface AppState {
   connection: ConnectionStatus;
   devices: Device[];
   searchQuery: string;
-  statusFilter: "all" | "online" | "offline";
+  statusFilter: "all" | "online" | "offline" | "favorites";
   uiPreferences: UiPreferences;
   actionLog: ActionLogEntry[];
   busyChannels: Record<string, boolean>;

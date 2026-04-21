@@ -64,7 +64,11 @@ impl TuyaService {
         .try_collect::<Vec<_>>()
         .await?;
 
-        sort_devices_by_order(&mut devices, &metadata.ui_preferences.device_order);
+        sort_devices_by_order(
+            &mut devices,
+            &metadata.ui_preferences.device_order,
+            &metadata.ui_preferences.favorite_device_ids,
+        );
         Ok(devices)
     }
 
@@ -553,10 +557,25 @@ mod tests {
     fn sort_devices_by_order_prioritizes_saved_device_order() {
         let mut devices = vec![make_device("b", "Beta"), make_device("a", "Alpha")];
 
-        sort_devices_by_order(&mut devices, &["b".into()]);
+        sort_devices_by_order(&mut devices, &["b".into()], &[]);
 
         assert_eq!(devices[0].id, "b");
         assert_eq!(devices[1].id, "a");
+    }
+
+    #[test]
+    fn sort_devices_by_order_prioritizes_favorites_before_saved_order() {
+        let mut devices = vec![
+            make_device("c", "Charlie"),
+            make_device("b", "Beta"),
+            make_device("a", "Alpha"),
+        ];
+
+        sort_devices_by_order(&mut devices, &["b".into()], &["c".into()]);
+
+        assert_eq!(devices[0].id, "c");
+        assert_eq!(devices[1].id, "b");
+        assert_eq!(devices[2].id, "a");
     }
 
     fn make_device(id: &str, name: &str) -> Device {
@@ -582,19 +601,31 @@ mod tests {
     }
 }
 
-fn sort_devices_by_order(devices: &mut [Device], device_order: &[String]) {
-    if device_order.is_empty() {
-        devices.sort_by(|left, right| left.name.to_lowercase().cmp(&right.name.to_lowercase()));
-        return;
-    }
-
+fn sort_devices_by_order(
+    devices: &mut [Device],
+    device_order: &[String],
+    favorite_device_ids: &[String],
+) {
     let order_index = device_order
         .iter()
         .enumerate()
         .map(|(index, device_id)| (device_id.as_str(), index))
         .collect::<std::collections::HashMap<_, _>>();
+    let favorite_set = favorite_device_ids
+        .iter()
+        .map(|device_id| device_id.as_str())
+        .collect::<std::collections::HashSet<_>>();
 
     devices.sort_by(|left, right| {
+        match (
+            favorite_set.contains(left.id.as_str()),
+            favorite_set.contains(right.id.as_str()),
+        ) {
+            (true, false) => return std::cmp::Ordering::Less,
+            (false, true) => return std::cmp::Ordering::Greater,
+            _ => {}
+        }
+
         match (
             order_index.get(left.id.as_str()),
             order_index.get(right.id.as_str()),

@@ -76,6 +76,7 @@ pub struct UiPreferences {
     pub view_mode: String,
     pub auto_refresh_seconds: u64,
     pub device_order: Vec<String>,
+    pub favorite_device_ids: Vec<String>,
 }
 
 impl Default for UiPreferences {
@@ -84,6 +85,7 @@ impl Default for UiPreferences {
             view_mode: "user".into(),
             auto_refresh_seconds: 0,
             device_order: Vec::new(),
+            favorite_device_ids: Vec::new(),
         }
     }
 }
@@ -279,4 +281,5 @@ pub struct SaveUiPreferencesPayload {
     pub view_mode: Option<String>,
     pub auto_refresh_seconds: Option<u64>,
     pub device_order: Option<Vec<String>>,
+    pub favorite_device_ids: Option<Vec<String>>,
 }

@@ -61,6 +61,7 @@ function renderUserHeader(state: AppState, visibleCount: number): string {
 
         <div class="segmented segmented--compact" role="tablist" aria-label="Status filter">
           ${renderFilterButton(state, "all", "All")}
+          ${renderFilterButton(state, "favorites", "Fav")}
           ${renderFilterButton(state, "online", "On")}
           ${renderFilterButton(state, "offline", "Off")}
         </div>
@@ -113,6 +114,7 @@ function renderDeveloperHeader(state: AppState, visibleCount: number): string {
 
           <div class="segmented" role="tablist" aria-label="Status filter">
             ${renderFilterButton(state, "all", "All")}
+            ${renderFilterButton(state, "favorites", "Favorites")}
             ${renderFilterButton(state, "online", "Online")}
             ${renderFilterButton(state, "offline", "Offline")}
           </div>

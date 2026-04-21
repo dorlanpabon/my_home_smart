@@ -16,6 +16,7 @@ const bootstrapPayload: BootstrapPayload = {
     viewMode: "developer",
     autoRefreshSeconds: 0,
     deviceOrder: [],
+    favoriteDeviceIds: [],
   },
   actionLog: [],
   devices: [],
@@ -99,12 +100,14 @@ function createApi(overrides: Partial<DesktopApi> = {}): DesktopApi {
     setDeviceChannels: () => Promise.reject(new Error("not used in this test")),
     saveDeviceAlias: () => Promise.resolve(),
     saveChannelAlias: () => Promise.resolve(),
-    saveUiPreferences: ({ viewMode, autoRefreshSeconds, deviceOrder }) =>
+    saveUiPreferences: ({ viewMode, autoRefreshSeconds, deviceOrder, favoriteDeviceIds }) =>
       Promise.resolve({
         viewMode: viewMode ?? bootstrapPayload.uiPreferences.viewMode,
         autoRefreshSeconds:
           autoRefreshSeconds ?? bootstrapPayload.uiPreferences.autoRefreshSeconds,
         deviceOrder: deviceOrder ?? bootstrapPayload.uiPreferences.deviceOrder,
+        favoriteDeviceIds:
+          favoriteDeviceIds ?? bootstrapPayload.uiPreferences.favoriteDeviceIds,
       }),
     getActionLog: () => Promise.resolve([]),
     ...overrides,
@@ -164,8 +167,37 @@ describe("AppStore", () => {
     await store.moveDevice("device-2", -1);
 
     expect(store.getState().devices.map((device) => device.id)).toEqual(["device-2", "device-1"]);
+  });
+
+  it("toggles favorite devices and persists the favorite ids", async () => {
+    const saveUiPreferences = vi.fn().mockImplementation(({ favoriteDeviceIds }) =>
+      Promise.resolve({
+        ...bootstrapPayload.uiPreferences,
+        favoriteDeviceIds: favoriteDeviceIds ?? [],
+      }),
+    );
+
+    const store = new AppStore(
+      createApi({
+        loadBootstrap: () =>
+          Promise.resolve({
+            ...bootstrapPayload,
+            devices: [
+              { ...cachedDevice, id: "device-1", name: "Sala" },
+              { ...cachedDevice, id: "device-2", name: "Cocina" },
+            ],
+          }),
+        saveUiPreferences,
+      }),
+    );
+
+    await store.bootstrap();
+    await store.toggleFavoriteDevice("device-2");
+
+    expect(store.getState().uiPreferences.favoriteDeviceIds).toEqual(["device-2"]);
+    expect(store.getState().devices.map((device) => device.id)).toEqual(["device-2", "device-1"]);
     expect(saveUiPreferences).toHaveBeenCalledWith({
-      deviceOrder: ["device-2", "device-1"],
+      favoriteDeviceIds: ["device-2"],
     });
   });
 

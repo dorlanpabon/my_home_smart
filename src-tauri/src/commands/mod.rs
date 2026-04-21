@@ -276,12 +276,17 @@ pub async fn save_ui_preferences(
             .auto_refresh_seconds
             .map(normalize_auto_refresh_seconds),
         device_order: payload.device_order.map(normalize_device_order),
+        favorite_device_ids: payload.favorite_device_ids.map(normalize_device_order),
     };
     let preferences = store
         .save_ui_preferences(&payload)
         .map_err(AppErrorPayload::from)?;
-    if let Some(device_order) = payload.device_order.as_ref() {
-        let _ = patch_cached_device_order(&store, device_order);
+    if payload.device_order.is_some() || payload.favorite_device_ids.is_some() {
+        let _ = patch_cached_device_sort(
+            &store,
+            &preferences.device_order,
+            &preferences.favorite_device_ids,
+        );
     }
     Ok(preferences)
 }
@@ -466,33 +471,45 @@ fn patch_cached_device_alias(
     Ok(())
 }
 
-fn patch_cached_device_order(store: &LocalStore, device_order: &[String]) -> Result<(), AppError> {
+fn patch_cached_device_sort(
+    store: &LocalStore,
+    device_order: &[String],
+    favorite_device_ids: &[String],
+) -> Result<(), AppError> {
     let Some(mut snapshot) = store.load_cached_devices()? else {
         return Ok(());
     };
 
-    sort_devices_by_order(&mut snapshot.devices, device_order);
+    sort_devices_by_order(&mut snapshot.devices, device_order, favorite_device_ids);
     store.save_cached_devices(&snapshot.devices)?;
     Ok(())
 }
 
-fn sort_devices_by_order(devices: &mut [crate::models::app::Device], device_order: &[String]) {
-    if device_order.is_empty() {
-        devices.sort_by(|left, right| {
-            resolve_cached_device_name(left)
-                .to_lowercase()
-                .cmp(&resolve_cached_device_name(right).to_lowercase())
-        });
-        return;
-    }
-
+fn sort_devices_by_order(
+    devices: &mut [crate::models::app::Device],
+    device_order: &[String],
+    favorite_device_ids: &[String],
+) {
     let order_index = device_order
         .iter()
         .enumerate()
         .map(|(index, device_id)| (device_id.as_str(), index))
         .collect::<std::collections::HashMap<_, _>>();
+    let favorite_set = favorite_device_ids
+        .iter()
+        .map(|device_id| device_id.as_str())
+        .collect::<std::collections::HashSet<_>>();
 
     devices.sort_by(|left, right| {
+        match (
+            favorite_set.contains(left.id.as_str()),
+            favorite_set.contains(right.id.as_str()),
+        ) {
+            (true, false) => return std::cmp::Ordering::Less,
+            (false, true) => return std::cmp::Ordering::Greater,
+            _ => {}
+        }
+
         match (
             order_index.get(left.id.as_str()),
             order_index.get(right.id.as_str()),

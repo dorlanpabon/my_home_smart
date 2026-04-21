@@ -3,9 +3,11 @@ import type { Device } from "../types/models";
 export function filterDevices(
   devices: Device[],
   searchQuery: string,
-  statusFilter: "all" | "online" | "offline",
+  statusFilter: "all" | "online" | "offline" | "favorites",
+  favoriteDeviceIds: string[] = [],
 ): Device[] {
   const normalizedQuery = searchQuery.trim().toLowerCase();
+  const favoriteSet = new Set(favoriteDeviceIds);
 
   return devices.filter((device) => {
     const matchesSearch =
@@ -19,7 +21,8 @@ export function filterDevices(
     const matchesFilter =
       statusFilter === "all" ||
       (statusFilter === "online" && device.online) ||
-      (statusFilter === "offline" && !device.online);
+      (statusFilter === "offline" && !device.online) ||
+      (statusFilter === "favorites" && favoriteSet.has(device.id));
 
     return matchesSearch && matchesFilter;
   });

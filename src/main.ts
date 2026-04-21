@@ -47,7 +47,12 @@ root.addEventListener("click", async (event) => {
       await store.testConnection();
       break;
     case "set-filter":
-      if (actionTarget.dataset.filter === "all" || actionTarget.dataset.filter === "online" || actionTarget.dataset.filter === "offline") {
+      if (
+        actionTarget.dataset.filter === "all" ||
+        actionTarget.dataset.filter === "online" ||
+        actionTarget.dataset.filter === "offline" ||
+        actionTarget.dataset.filter === "favorites"
+      ) {
         store.setStatusFilter(actionTarget.dataset.filter);
       }
       break;
@@ -83,6 +88,11 @@ root.addEventListener("click", async (event) => {
     case "copy-device-id":
       if (actionTarget.dataset.deviceId) {
         await copyText(actionTarget.dataset.deviceId);
+      }
+      break;
+    case "toggle-favorite-device":
+      if (actionTarget.dataset.deviceId) {
+        await store.toggleFavoriteDevice(actionTarget.dataset.deviceId);
       }
       break;
     case "move-device-up":

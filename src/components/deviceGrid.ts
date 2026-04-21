@@ -31,6 +31,7 @@ export function renderDeviceGrid(
           renderDeviceCard(device, {
             viewMode: state.uiPreferences.viewMode,
             busyChannels: state.busyChannels,
+            favoriteDeviceIds: state.uiPreferences.favoriteDeviceIds,
           }),
         )
         .join("")}

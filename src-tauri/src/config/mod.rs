@@ -130,6 +130,21 @@ impl LocalStore {
                 });
         }
 
+        if let Some(favorite_device_ids) = &payload.favorite_device_ids {
+            metadata.ui_preferences.favorite_device_ids = favorite_device_ids
+                .iter()
+                .filter_map(|entry| {
+                    let trimmed = entry.trim();
+                    (!trimmed.is_empty()).then(|| trimmed.to_string())
+                })
+                .fold(Vec::<String>::new(), |mut acc, entry| {
+                    if !acc.iter().any(|current| current == &entry) {
+                        acc.push(entry);
+                    }
+                    acc
+                });
+        }
+
         self.save_metadata(&metadata)?;
         Ok(metadata.ui_preferences)
     }
