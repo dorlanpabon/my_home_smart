@@ -6,6 +6,7 @@ import type {
   AppErrorPayload,
   BootstrapPayload,
   ConnectionTestResult,
+  DeviceStatusUpdate,
   Device,
   MaskedAppConfig,
   SaveChannelAliasPayload,
@@ -24,6 +25,7 @@ export interface DesktopApi {
   testConnection(payload: AppConfig): Promise<ConnectionTestResult>;
   listDevices(): Promise<Device[]>;
   refreshAllDevices(): Promise<Device[]>;
+  refreshDeviceStatuses(deviceIds: string[]): Promise<DeviceStatusUpdate[]>;
   toggleChannel(payload: ToggleChannelPayload): Promise<ToggleChannelResult>;
   saveDeviceAlias(payload: SaveDeviceAliasPayload): Promise<void>;
   saveChannelAlias(payload: SaveChannelAliasPayload): Promise<void>;
@@ -58,6 +60,10 @@ class TauriDesktopApi implements DesktopApi {
 
   refreshAllDevices(): Promise<Device[]> {
     return this.command<Device[]>("refresh_all_devices");
+  }
+
+  refreshDeviceStatuses(deviceIds: string[]): Promise<DeviceStatusUpdate[]> {
+    return this.command<DeviceStatusUpdate[]>("refresh_device_statuses", { deviceIds });
   }
 
   toggleChannel(payload: ToggleChannelPayload): Promise<ToggleChannelResult> {

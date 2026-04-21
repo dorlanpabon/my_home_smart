@@ -124,6 +124,11 @@ export interface ToggleChannelResult {
   actionLogEntry: ActionLogEntry;
 }
 
+export interface DeviceStatusUpdate {
+  deviceId: string;
+  statuses: TuyaStatus[];
+}
+
 export interface SaveDeviceAliasPayload {
   deviceId: string;
   alias: string;

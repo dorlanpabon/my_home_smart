@@ -25,6 +25,26 @@ const bootstrapPayload: BootstrapPayload = {
   usesCachedDevices: false,
 };
 
+const cachedDevice = {
+  id: "device-1",
+  name: "Sala",
+  online: true,
+  category: "kg",
+  productId: "abc",
+  inferredType: "3-gang light switch",
+  gangCount: 1,
+  channels: [],
+  raw: {
+    summary: {},
+    details: {},
+    functions: [],
+    status: [],
+    capabilities: [],
+    specifications: {},
+  },
+  metadata: null,
+};
+
 function createApi(overrides: Partial<DesktopApi> = {}): DesktopApi {
   return {
     isAvailable: () => true,
@@ -41,6 +61,7 @@ function createApi(overrides: Partial<DesktopApi> = {}): DesktopApi {
       }),
     listDevices: () => Promise.resolve([]),
     refreshAllDevices: () => Promise.resolve([]),
+    refreshDeviceStatuses: () => Promise.resolve([]),
     toggleChannel: () => Promise.reject(new Error("not used in this test")),
     saveDeviceAlias: () => Promise.resolve(),
     saveChannelAlias: () => Promise.resolve(),
@@ -70,27 +91,7 @@ describe("AppStore", () => {
   });
 
   it("refreshes in background after loading cached bootstrap devices", async () => {
-    const refreshAllDevices = vi.fn().mockResolvedValue([
-      {
-        id: "device-1",
-        name: "Sala",
-        online: true,
-        category: "kg",
-        productId: "abc",
-        inferredType: "3-gang light switch",
-        gangCount: 1,
-        channels: [],
-        raw: {
-          summary: {},
-          details: {},
-          functions: [],
-          status: [],
-          capabilities: [],
-          specifications: {},
-        },
-        metadata: null,
-      },
-    ]);
+    const refreshDeviceStatuses = vi.fn().mockResolvedValue([]);
 
     const store = new AppStore(
       createApi({
@@ -98,15 +99,16 @@ describe("AppStore", () => {
           Promise.resolve({
             ...bootstrapPayload,
             usesCachedDevices: true,
-            devices: [],
+            devices: [cachedDevice],
           }),
-        refreshAllDevices,
+        refreshDeviceStatuses,
       }),
     );
 
     await store.bootstrap();
     await Promise.resolve();
 
-    expect(refreshAllDevices).toHaveBeenCalledTimes(1);
+    expect(refreshDeviceStatuses).toHaveBeenCalledTimes(1);
+    expect(refreshDeviceStatuses).toHaveBeenCalledWith(["device-1"]);
   });
 });

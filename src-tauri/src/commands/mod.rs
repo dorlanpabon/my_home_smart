@@ -5,8 +5,8 @@ use crate::{
     errors::{AppError, AppErrorPayload},
     models::app::{
         ActionLogEntry, AppConfig, BootstrapPayload, ChannelAlias, ConnectionStatus,
-        SaveChannelAliasPayload, SaveDeviceAliasPayload, SaveUiPreferencesPayload,
-        ToggleChannelPayload, ToggleChannelResult,
+        DeviceStatusUpdate, SaveChannelAliasPayload, SaveDeviceAliasPayload,
+        SaveUiPreferencesPayload, ToggleChannelPayload, ToggleChannelResult,
     },
     services::tuya::service::TuyaService,
     SharedState,
@@ -159,6 +159,31 @@ pub async fn refresh_all_devices(
 }
 
 #[tauri::command]
+pub async fn refresh_device_statuses(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+    device_ids: Vec<String>,
+) -> Result<Vec<DeviceStatusUpdate>, AppErrorPayload> {
+    let store = LocalStore::new(&app);
+    let config = store
+        .load_config()
+        .map_err(AppErrorPayload::from)?
+        .ok_or_else(|| AppErrorPayload::from(AppError::MissingConfig))?;
+
+    if device_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let service = TuyaService::new(config, state.token_cache.clone());
+    let updates = service
+        .get_device_statuses(&device_ids)
+        .await
+        .map_err(AppErrorPayload::from)?;
+    let _ = patch_cached_device_statuses_batch(&store, &updates);
+    Ok(updates)
+}
+
+#[tauri::command]
 pub async fn toggle_channel(
     app: AppHandle,
     state: State<'_, SharedState>,
@@ -287,6 +312,45 @@ fn patch_cached_device_statuses(
         }
 
         device.raw.status = statuses.to_vec();
+        store.save_cached_devices(&snapshot.devices)?;
+    }
+
+    Ok(())
+}
+
+fn patch_cached_device_statuses_batch(
+    store: &LocalStore,
+    updates: &[DeviceStatusUpdate],
+) -> Result<(), AppError> {
+    let Some(mut snapshot) = store.load_cached_devices()? else {
+        return Ok(());
+    };
+
+    let mut changed = false;
+    for update in updates {
+        if let Some(device) = snapshot
+            .devices
+            .iter_mut()
+            .find(|entry| entry.id == update.device_id)
+        {
+            for channel in &mut device.channels {
+                if let Some(status) = update
+                    .statuses
+                    .iter()
+                    .find(|entry| entry.code == channel.code)
+                {
+                    if let Some(value) = parse_status_bool(&status.value) {
+                        channel.current_state = Some(value);
+                    }
+                }
+            }
+
+            device.raw.status = update.statuses.clone();
+            changed = true;
+        }
+    }
+
+    if changed {
         store.save_cached_devices(&snapshot.devices)?;
     }
 

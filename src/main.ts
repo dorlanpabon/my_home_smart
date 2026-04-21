@@ -132,6 +132,16 @@ root.addEventListener("submit", async (event) => {
 
 void store.bootstrap();
 
+window.addEventListener("focus", () => {
+  void store.refreshStatuses();
+});
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") {
+    void store.refreshStatuses();
+  }
+});
+
 function scheduleRender(): void {
   if (renderScheduled) {
     return;

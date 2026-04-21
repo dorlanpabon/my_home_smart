@@ -1,20 +1,18 @@
 use std::{
     collections::BTreeMap,
     sync::{Arc, Mutex},
-    time::Duration,
 };
 
 use futures::{stream, StreamExt, TryStreamExt};
 use reqwest::Method;
 use serde_json::{json, Value};
-use tokio::time::sleep;
 
 use crate::{
     errors::{AppError, AppResult},
     models::{
         app::{
-            ActionLogEntry, AppConfig, ConnectionTestResult, Device, LocalMetadata,
-            ToggleChannelPayload, ToggleChannelResult,
+            ActionLogEntry, AppConfig, ConnectionTestResult, Device, DeviceStatusUpdate,
+            LocalMetadata, ToggleChannelPayload, ToggleChannelResult,
         },
         tuya::{TuyaFunction, TuyaStatus},
     },
@@ -122,13 +120,7 @@ impl TuyaService {
             ));
         }
 
-        let statuses = self
-            .fetch_confirmed_channel_status(
-                &payload.device_id,
-                &payload.channel_code,
-                payload.value,
-            )
-            .await;
+        let statuses = ensure_channel_status(Vec::new(), &payload.channel_code, payload.value);
 
         let action_log_entry = ActionLogEntry {
             timestamp_ms: current_timestamp_ms(),
@@ -159,6 +151,32 @@ impl TuyaService {
             statuses,
             action_log_entry,
         })
+    }
+
+    pub async fn get_device_statuses(
+        &self,
+        device_ids: &[String],
+    ) -> AppResult<Vec<DeviceStatusUpdate>> {
+        let concurrency = device_ids.len().clamp(4, 12);
+
+        let updates = stream::iter(device_ids.iter().cloned().map(|device_id| {
+            let service = self.clone();
+            async move {
+                service
+                    .fetch_device_status(&device_id)
+                    .await
+                    .map(|statuses| DeviceStatusUpdate {
+                        device_id,
+                        statuses,
+                    })
+            }
+        }))
+        .buffer_unordered(concurrency)
+        .filter_map(|result| async move { result.ok() })
+        .collect::<Vec<_>>()
+        .await;
+
+        Ok(updates)
     }
 
     async fn hydrate_device(&self, summary: Value, metadata: &LocalMetadata) -> AppResult<Device> {
@@ -285,36 +303,6 @@ impl TuyaService {
         Ok(Vec::new())
     }
 
-    async fn fetch_confirmed_channel_status(
-        &self,
-        device_id: &str,
-        channel_code: &str,
-        expected_value: bool,
-    ) -> Vec<TuyaStatus> {
-        let mut last_statuses = Vec::new();
-
-        for delay_ms in [0_u64, 120, 250, 450] {
-            if delay_ms > 0 {
-                sleep(Duration::from_millis(delay_ms)).await;
-            }
-
-            if let Ok(statuses) = self.fetch_device_status(device_id).await {
-                let is_confirmed = statuses
-                    .iter()
-                    .find(|entry| entry.code == channel_code)
-                    .and_then(|entry| status_value_as_bool(&entry.value))
-                    == Some(expected_value);
-
-                last_statuses = statuses;
-                if is_confirmed {
-                    return last_statuses;
-                }
-            }
-        }
-
-        ensure_channel_status(last_statuses, channel_code, expected_value)
-    }
-
     async fn authorized_request(
         &self,
         method: Method,
@@ -426,6 +414,7 @@ fn ensure_channel_status(
     statuses
 }
 
+#[cfg(test)]
 fn status_value_as_bool(value: &Value) -> Option<bool> {
     match value {
         Value::Bool(inner) => Some(*inner),

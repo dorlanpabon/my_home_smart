@@ -9,6 +9,7 @@ import type {
   DeviceChannel,
   SaveChannelAliasPayload,
   SaveDeviceAliasPayload,
+  DeviceStatusUpdate,
   ToastMessage,
   UiPreferences,
 } from "../types/models";
@@ -54,6 +55,7 @@ export class AppStore {
   private readonly listeners = new Set<Listener>();
   private readonly api: DesktopApi;
   private refreshPromise: Promise<void> | null = null;
+  private statusRefreshPromise: Promise<void> | null = null;
 
   constructor(api: DesktopApi = desktopApi) {
     this.api = api;
@@ -319,6 +321,7 @@ export class AppStore {
         devices: applyStatusesToDevices(this.state.devices, result.deviceId, result.statuses),
         actionLog: [result.actionLogEntry, ...this.state.actionLog].slice(0, 50),
       });
+      void this.refreshStatuses([result.deviceId], { background: true, delayMs: 220 });
     } catch (error) {
       this.patchState({
         devices: previousDevices,
@@ -332,6 +335,70 @@ export class AppStore {
       delete busyChannels[busyKey];
       this.patchState({ busyChannels });
     }
+  }
+
+  async refreshStatuses(
+    deviceIds?: string[],
+    options: RefreshOptions & { delayMs?: number } = {},
+  ): Promise<void> {
+    if (!this.api.isAvailable()) {
+      return;
+    }
+
+    const ids = Array.from(
+      new Set(
+        (deviceIds ?? this.state.devices.map((device) => device.id)).filter(
+          (id) => id.trim().length > 0,
+        ),
+      ),
+    );
+
+    if (ids.length === 0) {
+      return;
+    }
+
+    if (this.statusRefreshPromise) {
+      await this.statusRefreshPromise;
+      return;
+    }
+
+    const { background = true, delayMs = 0 } = options;
+    const hadDevices = this.state.devices.length > 0;
+
+    this.statusRefreshPromise = (async () => {
+      try {
+        if (delayMs > 0) {
+          await wait(delayMs);
+        }
+
+        const updates = await this.api.refreshDeviceStatuses(ids);
+        if (updates.length === 0) {
+          return;
+        }
+
+        this.patchState({
+          devices: applyDeviceStatusUpdates(this.state.devices, updates),
+          connection: {
+            state: "connected",
+            message: background
+              ? "Device state synchronized from Tuya Cloud."
+              : "Device state refreshed from Tuya Cloud.",
+            lastCheckedAt: Date.now(),
+          },
+        });
+      } catch (error) {
+        if (!background || !hadDevices) {
+          this.pushToast({
+            tone: "error",
+            message: toMessage(error),
+          });
+        }
+      } finally {
+        this.statusRefreshPromise = null;
+      }
+    })();
+
+    await this.statusRefreshPromise;
   }
 
   async saveDeviceAlias(payload: SaveDeviceAliasPayload): Promise<void> {
@@ -424,7 +491,7 @@ export class AppStore {
     });
 
     if (payload.hasConfig && payload.usesCachedDevices && this.api.isAvailable()) {
-      void this.refreshDevicesWithOptions({ background: true });
+      void this.refreshStatuses(undefined, { background: true });
     }
   }
 
@@ -509,6 +576,34 @@ function applyStatusesToDevices(
   });
 }
 
+function applyDeviceStatusUpdates(
+  devices: Device[],
+  updates: DeviceStatusUpdate[],
+): Device[] {
+  const updateMap = new Map(
+    updates.map((update) => [update.deviceId, update.statuses] as const),
+  );
+
+  return devices.map((device) => {
+    const statuses = updateMap.get(device.id);
+    if (!statuses) {
+      return device;
+    }
+
+    const statusMap = new Map(statuses.map((status) => [status.code, status.value] as const));
+    return {
+      ...device,
+      channels: device.channels.map((channel) => ({
+        ...channel,
+        currentState:
+          typeof statusMap.get(channel.code) === "boolean"
+            ? (statusMap.get(channel.code) as boolean)
+            : channel.currentState,
+      })),
+    };
+  });
+}
+
 function hasStateChanges(
   previous: AppState,
   next: AppState,
@@ -569,4 +664,8 @@ function toMessage(error: unknown): string {
   }
 
   return "Unexpected application error.";
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
