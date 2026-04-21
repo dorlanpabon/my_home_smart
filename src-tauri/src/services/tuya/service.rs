@@ -12,7 +12,7 @@ use crate::{
     models::{
         app::{
             ActionLogEntry, AppConfig, ConnectionTestResult, Device, DeviceStatusUpdate,
-            LocalMetadata, ToggleChannelPayload, ToggleChannelResult,
+            LocalMetadata, SetDeviceChannelsResult, ToggleChannelPayload, ToggleChannelResult,
         },
         tuya::{TuyaFunction, TuyaStatus},
     },
@@ -88,37 +88,11 @@ impl TuyaService {
         metadata: &LocalMetadata,
         payload: ToggleChannelPayload,
     ) -> AppResult<ToggleChannelResult> {
-        let command = json!({
-            "commands": [
-                {
-                    "code": payload.channel_code,
-                    "value": payload.value
-                }
-            ]
-        });
-
-        let command_paths = [
-            format!("/v1.0/devices/{}/commands", payload.device_id),
-            format!("/v1.0/iot-03/devices/{}/commands", payload.device_id),
-        ];
-
-        let mut command_sent = false;
-        for path in command_paths {
-            if self
-                .authorized_request(Method::POST, &path, BTreeMap::new(), Some(command.clone()))
-                .await
-                .is_ok()
-            {
-                command_sent = true;
-                break;
-            }
-        }
-
-        if !command_sent {
-            return Err(AppError::UnexpectedResponse(
-                "None of the supported command endpoints accepted the request.".into(),
-            ));
-        }
+        self.send_device_commands(
+            &payload.device_id,
+            vec![(payload.channel_code.clone(), payload.value)],
+        )
+        .await?;
 
         let statuses = ensure_channel_status(Vec::new(), &payload.channel_code, payload.value);
 
@@ -148,6 +122,60 @@ impl TuyaService {
 
         Ok(ToggleChannelResult {
             device_id: payload.device_id,
+            statuses,
+            action_log_entry,
+        })
+    }
+
+    pub async fn set_device_channels(
+        &self,
+        metadata: &LocalMetadata,
+        device_id: &str,
+        channel_codes: &[String],
+        value: bool,
+    ) -> AppResult<SetDeviceChannelsResult> {
+        if channel_codes.is_empty() {
+            return Err(AppError::UnexpectedResponse(
+                "No controllable channels detected for this device.".into(),
+            ));
+        }
+
+        self.send_device_commands(
+            device_id,
+            channel_codes
+                .iter()
+                .cloned()
+                .map(|channel_code| (channel_code, value))
+                .collect(),
+        )
+        .await?;
+
+        let statuses = channel_codes
+            .iter()
+            .fold(Vec::new(), |current, channel_code| {
+                ensure_channel_status(current, channel_code, value)
+            });
+
+        let action_log_entry = ActionLogEntry {
+            timestamp_ms: current_timestamp_ms(),
+            action: if value {
+                "device_channels_on".into()
+            } else {
+                "device_channels_off".into()
+            },
+            device_id: Some(device_id.to_string()),
+            device_name: metadata.device_alias_for(device_id).map(str::to_string),
+            channel_code: None,
+            success: true,
+            message: format!(
+                "{} channel(s) {}",
+                channel_codes.len(),
+                if value { "turned on" } else { "turned off" }
+            ),
+        };
+
+        Ok(SetDeviceChannelsResult {
+            device_id: device_id.to_string(),
             statuses,
             action_log_entry,
         })
@@ -332,6 +360,38 @@ impl TuyaService {
             }
             Err(err) => Err(err),
         }
+    }
+
+    async fn send_device_commands(
+        &self,
+        device_id: &str,
+        commands: Vec<(String, bool)>,
+    ) -> AppResult<()> {
+        let command = json!({
+            "commands": commands
+                .into_iter()
+                .map(|(code, value)| json!({ "code": code, "value": value }))
+                .collect::<Vec<_>>()
+        });
+
+        let command_paths = [
+            format!("/v1.0/devices/{device_id}/commands"),
+            format!("/v1.0/iot-03/devices/{device_id}/commands"),
+        ];
+
+        for path in command_paths {
+            if self
+                .authorized_request(Method::POST, &path, BTreeMap::new(), Some(command.clone()))
+                .await
+                .is_ok()
+            {
+                return Ok(());
+            }
+        }
+
+        Err(AppError::UnexpectedResponse(
+            "None of the supported command endpoints accepted the request.".into(),
+        ))
     }
 }
 

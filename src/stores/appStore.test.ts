@@ -47,6 +47,37 @@ const cachedDevice = {
   metadata: null,
 };
 
+const deviceWithChannels = {
+  ...cachedDevice,
+  gangCount: 3,
+  channels: [
+    {
+      code: "switch_1",
+      displayName: "Channel 1",
+      index: 1,
+      currentState: false,
+      controllable: true,
+      alias: null,
+    },
+    {
+      code: "switch_2",
+      displayName: "Channel 2",
+      index: 2,
+      currentState: false,
+      controllable: true,
+      alias: null,
+    },
+    {
+      code: "switch_3",
+      displayName: "Channel 3",
+      index: 3,
+      currentState: false,
+      controllable: true,
+      alias: null,
+    },
+  ],
+};
+
 function createApi(overrides: Partial<DesktopApi> = {}): DesktopApi {
   return {
     isAvailable: () => true,
@@ -65,6 +96,7 @@ function createApi(overrides: Partial<DesktopApi> = {}): DesktopApi {
     refreshAllDevices: () => Promise.resolve([]),
     refreshDeviceStatuses: () => Promise.resolve([]),
     toggleChannel: () => Promise.reject(new Error("not used in this test")),
+    setDeviceChannels: () => Promise.reject(new Error("not used in this test")),
     saveDeviceAlias: () => Promise.resolve(),
     saveChannelAlias: () => Promise.resolve(),
     saveUiPreferences: ({ viewMode, autoRefreshSeconds, deviceOrder }) =>
@@ -157,5 +189,50 @@ describe("AppStore", () => {
 
     expect(refreshDeviceStatuses).toHaveBeenCalledTimes(1);
     expect(refreshDeviceStatuses).toHaveBeenCalledWith(["device-1"]);
+  });
+
+  it("updates all controllable channels for a device in one action", async () => {
+    const setDeviceChannels = vi.fn().mockResolvedValue({
+      deviceId: "device-1",
+      statuses: [
+        { code: "switch_1", value: true },
+        { code: "switch_2", value: true },
+        { code: "switch_3", value: true },
+      ],
+      actionLogEntry: {
+        timestampMs: 123,
+        action: "device_channels_on",
+        deviceId: "device-1",
+        deviceName: "Sala",
+        channelCode: null,
+        success: true,
+        message: "3 channel(s) turned on",
+      },
+    });
+
+    const store = new AppStore(
+      createApi({
+        loadBootstrap: () =>
+          Promise.resolve({
+            ...bootstrapPayload,
+            devices: [deviceWithChannels],
+          }),
+        setDeviceChannels,
+      }),
+    );
+
+    await store.bootstrap();
+    await store.setDeviceChannels("device-1", true);
+
+    expect(setDeviceChannels).toHaveBeenCalledWith({
+      deviceId: "device-1",
+      value: true,
+    });
+    expect(
+      store
+        .getState()
+        .devices[0]
+        ?.channels.map((channel) => channel.currentState),
+    ).toEqual([true, true, true]);
   });
 });

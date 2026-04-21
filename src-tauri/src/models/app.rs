@@ -230,7 +230,22 @@ pub struct ToggleChannelPayload {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct SetDeviceChannelsPayload {
+    pub device_id: String,
+    pub value: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ToggleChannelResult {
+    pub device_id: String,
+    pub statuses: Vec<TuyaStatus>,
+    pub action_log_entry: ActionLogEntry,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetDeviceChannelsResult {
     pub device_id: String,
     pub statuses: Vec<TuyaStatus>,
     pub action_log_entry: ActionLogEntry,

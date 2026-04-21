@@ -25,6 +25,7 @@ function renderUserDeviceCard(
   device: Device,
   busyChannels: Record<string, boolean>,
 ): string {
+  const bulkActions = renderBulkActions(device, busyChannels);
   return `
     <article class="device-card device-card--user ${device.online ? "is-online" : "is-offline"}">
       <div class="device-card__user-head">
@@ -37,6 +38,8 @@ function renderUserDeviceCard(
           ${device.online ? "Online" : "Offline"}
         </span>
       </div>
+
+      ${bulkActions}
 
       <div class="channel-tile-grid">
         ${
@@ -55,6 +58,7 @@ function renderDeveloperDeviceCard(
   device: Device,
   busyChannels: Record<string, boolean>,
 ): string {
+  const bulkActions = renderBulkActions(device, busyChannels);
   return `
     <article class="device-card device-card--developer ${device.online ? "is-online" : "is-offline"}">
       <div class="device-card__header">
@@ -103,6 +107,8 @@ function renderDeveloperDeviceCard(
         <span><strong>Channels</strong> ${device.gangCount || 0}</span>
         <span><strong>Product</strong> ${escapeHtml(device.productId ?? "n/a")}</span>
       </div>
+
+      ${bulkActions}
 
       <div class="channel-strip">
         ${device.channels
@@ -176,6 +182,44 @@ function renderDeveloperChannelRow(
         ${isBusy ? "Sending..." : unknown ? "Set state" : active ? "Turn off" : "Turn on"}
       </button>
     </section>
+  `;
+}
+
+function renderBulkActions(
+  device: Device,
+  busyChannels: Record<string, boolean>,
+): string {
+  const controllableChannels = device.channels.filter((channel) => channel.controllable);
+  if (controllableChannels.length < 2) {
+    return "";
+  }
+
+  const deviceBusy = controllableChannels.some(
+    (channel) => busyChannels[`${device.id}:${channel.code}`],
+  );
+  const disabled = deviceBusy || !device.online;
+
+  return `
+    <div class="device-card__bulk-actions">
+      <button
+        class="button button--ghost device-card__bulk-button"
+        data-action="set-device-channels"
+        data-device-id="${escapeHtml(device.id)}"
+        data-value="true"
+        ${disabled ? "disabled" : ""}
+      >
+        ${deviceBusy ? "Sending..." : "All on"}
+      </button>
+      <button
+        class="button button--ghost device-card__bulk-button"
+        data-action="set-device-channels"
+        data-device-id="${escapeHtml(device.id)}"
+        data-value="false"
+        ${disabled ? "disabled" : ""}
+      >
+        ${deviceBusy ? "Sending..." : "All off"}
+      </button>
+    </div>
   `;
 }
 

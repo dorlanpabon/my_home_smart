@@ -72,6 +72,14 @@ root.addEventListener("click", async (event) => {
         );
       }
       break;
+    case "set-device-channels":
+      if (actionTarget.dataset.deviceId && actionTarget.dataset.value) {
+        await store.setDeviceChannels(
+          actionTarget.dataset.deviceId,
+          actionTarget.dataset.value === "true",
+        );
+      }
+      break;
     case "copy-device-id":
       if (actionTarget.dataset.deviceId) {
         await copyText(actionTarget.dataset.deviceId);
