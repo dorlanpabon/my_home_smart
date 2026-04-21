@@ -152,12 +152,12 @@ root.addEventListener("submit", async (event) => {
 void store.bootstrap();
 
 window.addEventListener("focus", () => {
-  void store.refreshStatuses();
+  void refreshVisibleStatuses();
 });
 
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") {
-    void store.refreshStatuses();
+    void refreshVisibleStatuses();
   }
 });
 
@@ -176,8 +176,13 @@ function syncAutoRefresh(state: ReturnType<AppStore["getState"]>): void {
       return;
     }
 
-    void store.refreshStatuses();
+    void refreshVisibleStatuses();
   }, state.uiPreferences.autoRefreshSeconds * 1_000);
+}
+
+function refreshVisibleStatuses(): Promise<void> {
+  const deviceIds = store.getVisibleDevices().map((device) => device.id);
+  return store.refreshStatuses(deviceIds);
 }
 
 function scheduleRender(): void {
