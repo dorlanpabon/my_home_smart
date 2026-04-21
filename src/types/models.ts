@@ -26,6 +26,7 @@ export interface ChannelAlias {
 
 export interface UiPreferences {
   viewMode: "user" | "developer";
+  autoRefreshSeconds: 0 | 15 | 30 | 60;
 }
 
 export interface DeviceLocalMetadata {
@@ -141,7 +142,8 @@ export interface SaveChannelAliasPayload {
 }
 
 export interface SaveUiPreferencesPayload {
-  viewMode: UiPreferences["viewMode"];
+  viewMode?: UiPreferences["viewMode"];
+  autoRefreshSeconds?: UiPreferences["autoRefreshSeconds"];
 }
 
 export interface AppErrorPayload {

@@ -65,6 +65,12 @@ function renderUserHeader(state: AppState, visibleCount: number): string {
           ${renderFilterButton(state, "offline", "Off")}
         </div>
 
+        <div class="segmented segmented--compact" role="tablist" aria-label="Auto refresh">
+          ${renderAutoRefreshButton(state, 0, "Live off")}
+          ${renderAutoRefreshButton(state, 15, "15s")}
+          ${renderAutoRefreshButton(state, 30, "30s")}
+        </div>
+
         <span class="topbar__mini-stats">${visibleCount}/${state.devices.length} visible</span>
       </div>
     </header>
@@ -111,6 +117,13 @@ function renderDeveloperHeader(state: AppState, visibleCount: number): string {
             ${renderFilterButton(state, "offline", "Offline")}
           </div>
 
+          <div class="segmented" role="tablist" aria-label="Auto refresh">
+            ${renderAutoRefreshButton(state, 0, "Live off")}
+            ${renderAutoRefreshButton(state, 15, "15s")}
+            ${renderAutoRefreshButton(state, 30, "30s")}
+            ${renderAutoRefreshButton(state, 60, "60s")}
+          </div>
+
           <button class="button button--secondary" data-action="open-config">
             Settings
           </button>
@@ -130,6 +143,25 @@ function renderDeveloperHeader(state: AppState, visibleCount: number): string {
         </div>
       </div>
     </header>
+  `;
+}
+
+function renderAutoRefreshButton(
+  state: AppState,
+  seconds: AppState["uiPreferences"]["autoRefreshSeconds"],
+  label: string,
+): string {
+  const active = state.uiPreferences.autoRefreshSeconds === seconds;
+  return `
+    <button
+      class="segmented__button ${active ? "is-active" : ""}"
+      data-action="set-auto-refresh"
+      data-auto-refresh="${seconds}"
+      aria-pressed="${active}"
+      title="Auto refresh ${label}"
+    >
+      ${label}
+    </button>
   `;
 }
 

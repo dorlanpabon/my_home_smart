@@ -15,9 +15,11 @@ const store = new AppStore();
 let queuedState = store.getState();
 let renderScheduled = false;
 let lastMarkup = "";
+let autoRefreshTimer: number | null = null;
 
 store.subscribe((state) => {
   queuedState = state;
+  syncAutoRefresh(state);
   scheduleRender();
 });
 
@@ -54,6 +56,13 @@ root.addEventListener("click", async (event) => {
         await store.setViewMode(actionTarget.dataset.viewMode);
       }
       break;
+    case "set-auto-refresh": {
+      const value = Number(actionTarget.dataset.autoRefresh);
+      if (value === 0 || value === 15 || value === 30 || value === 60) {
+        await store.setAutoRefreshSeconds(value);
+      }
+      break;
+    }
     case "toggle-channel":
       if (actionTarget.dataset.deviceId && actionTarget.dataset.channelCode && actionTarget.dataset.value) {
         await store.toggleChannel(
@@ -141,6 +150,25 @@ document.addEventListener("visibilitychange", () => {
     void store.refreshStatuses();
   }
 });
+
+function syncAutoRefresh(state: ReturnType<AppStore["getState"]>): void {
+  if (autoRefreshTimer !== null) {
+    window.clearInterval(autoRefreshTimer);
+    autoRefreshTimer = null;
+  }
+
+  if (state.uiPreferences.autoRefreshSeconds === 0) {
+    return;
+  }
+
+  autoRefreshTimer = window.setInterval(() => {
+    if (document.visibilityState !== "visible") {
+      return;
+    }
+
+    void store.refreshStatuses();
+  }, state.uiPreferences.autoRefreshSeconds * 1_000);
+}
 
 function scheduleRender(): void {
   if (renderScheduled) {
